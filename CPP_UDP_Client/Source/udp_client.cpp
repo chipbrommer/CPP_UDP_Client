@@ -28,8 +28,7 @@ namespace Essentials
 			mTitle = "UDP Client";
 			mLastError = UdpClientError::NONE;
 			mAddress = "";
-			mSendPort = -1;
-			mRecvPort = -1;
+			mPort = -1;
 			mBroadcastAddr = {};
 			mMulticastInfo = new Endpoint();
 			mLastReceiveInfo = new Endpoint();
@@ -44,7 +43,7 @@ namespace Essentials
 #endif
 		}
 
-		UDP_Client::UDP_Client(const std::string& address, const int16_t sendPort, const int16_t recvPort)
+		UDP_Client::UDP_Client(const std::string& address, const int16_t port)
 		{
 			if (ValidateIP(address) >= 0)
 			{
@@ -55,18 +54,9 @@ namespace Essentials
 				mLastError = UdpClientError::BAD_ADDRESS;
 			}
 
-			if (ValidatePort(sendPort) == true)
+			if (ValidatePort(port) == true)
 			{
-				mSendPort = sendPort;
-			}
-			else
-			{
-				mLastError = UdpClientError::BAD_PORT;
-			}
-
-			if (ValidatePort(recvPort) == true)
-			{
-				mRecvPort = recvPort;
+				mPort = port;
 			}
 			else
 			{
@@ -99,8 +89,16 @@ namespace Essentials
 		{
 			if(!mBroadcastEnabled)
 			{
+#ifdef WIN32
+				if (WSAStartup(MAKEWORD(2, 2), &mWsaData) != 0)
+				{
+					mLastError = UdpClientError::WINSOCK_FAILURE;
+					return -1;
+				}
+#endif 
+
 				// Open the broadcast socket
-				mBroadcastSocket = socket(AF_INET, SOCK_STREAM, 0);
+				mBroadcastSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
 				if (mBroadcastSocket == -1)
 				{
@@ -111,25 +109,25 @@ namespace Essentials
 				// Setup broadcast addr
 				memset(reinterpret_cast<char*>(&mBroadcastAddr), 0, sizeof(mBroadcastAddr));
 				mBroadcastAddr.sin_family = AF_INET;
-				mBroadcastAddr.sin_port = htons(mSendPort);
+				mBroadcastAddr.sin_port = htons(mPort);
 
-				// set broadcast address
-				if (inet_pton(AF_INET, address.c_str(), &(mBroadcastAddr.sin_addr)) <= 0)
+				if (address == "")
 				{
-					mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
-					return -1;
+					mBroadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
 				}
-
-				// Connect to the server
-				if (connect(mBroadcastSocket, (struct sockaddr*)&mBroadcastAddr, sizeof(mBroadcastAddr)) < 0)
+				else
 				{
-					mLastError = UdpClientError::CONNECTION_FAILED;
-					CloseBroadcast();
-					return -1;
+					// set broadcast address
+					if (inet_pton(AF_INET, address.c_str(), &(mBroadcastAddr.sin_addr)) <= 0)
+					{
+						mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
+						return -1;
+					}
 				}
 
 				// set broadcast option
-				if (setsockopt(mBroadcastSocket, SOL_SOCKET, SO_BROADCAST, (char*)1, sizeof(char*)) < 0)
+				int broadcast = 1;
+				if (setsockopt(mBroadcastSocket, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(broadcast)) < 0)
 				{
 					mLastError = UdpClientError::ENABLE_BROADCAST_FAILED;
 					return -1;
@@ -212,7 +210,7 @@ namespace Essentials
 			return -1;
 		}
 
-		int8_t UDP_Client::Configure(const std::string& address, const int16_t sendPort, const int16_t recvPort)
+		int8_t UDP_Client::Configure(const std::string& address, const int16_t port)
 		{
 			if (ValidateIP(address) >= 0)
 			{
@@ -224,19 +222,9 @@ namespace Essentials
 				return -1;
 			}
 
-			if (ValidatePort(sendPort) == true)
+			if (ValidatePort(port) == true)
 			{
-				mSendPort = sendPort;
-			}
-			else
-			{
-				mLastError = UdpClientError::BAD_PORT;
-				return -1;
-			}
-
-			if (ValidatePort(recvPort) == true)
-			{
-				mRecvPort = recvPort;
+				mPort = port;
 			}
 			else
 			{
@@ -300,13 +288,7 @@ namespace Essentials
 				return -1;
 			}
 
-			if (!ValidatePort(mSendPort))
-			{
-				mLastError = UdpClientError::PORT_NOT_SET;
-				return -1;
-			}
-
-			if (!ValidatePort(mRecvPort))
+			if (!ValidatePort(mPort))
 			{
 				mLastError = UdpClientError::PORT_NOT_SET;
 				return -1;
@@ -320,7 +302,7 @@ namespace Essentials
 			}
 #endif 
 
-			mSocket = socket(AF_INET, SOCK_STREAM, 0);
+			mSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
 			if (mSocket == -1)
 			{
@@ -331,7 +313,7 @@ namespace Essentials
 			// Setup destination addr
 			memset(reinterpret_cast<char*>(&mDestinationAddr), 0, sizeof(mDestinationAddr));
 			mDestinationAddr.sin_family = AF_INET;
-			mDestinationAddr.sin_port = htons(mSendPort);
+			mDestinationAddr.sin_port = htons(mPort);
 
 			// set destination address
 			if (inet_pton(AF_INET, mAddress.c_str(), &(mDestinationAddr.sin_addr)) <= 0)

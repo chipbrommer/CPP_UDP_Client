@@ -21,8 +21,16 @@
 #pragma comment(lib, "ws2_32.lib")
 #else
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+typedef int SOCKET;
+typedef struct sockaddr_in SOCKADDR_IN;
+typedef struct sockaddr SOCKADDR;
+const int INVALID_SOCKET = -1;
+const int SOCKET_ERROR = -1;
+const int SD_BOTH = SHUT_RDWR;
+#define closesocket(s) close(s)
 #endif
 #include <map>							// Error enum to strings.
 #include <string>						// Strings
@@ -128,13 +136,13 @@ namespace Essentials
 			UDP_Client();
 
 			/// <summary>Constructor to receive an address and port</summary>
-			UDP_Client(const std::string& address, const int16_t sendPort, const int16_t recvPort);
+			UDP_Client(const std::string& address, const int16_t port);
 
 			/// <summary>Default Deconstructor</summary>
 			~UDP_Client();
 
 			/// <summary>A function to enable broadcasting</summary>
-			/// <param name="address"> -[in]- Address to broadcast on.</param>
+			/// <param name="address"> -[in]- Address to broadcast on, send empty string to broadcast on all addresses.</param>
 			/// <param name="port"> -[in]- Port to broadcast on</param>
 			//// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
 			int8_t EnableBroadcast(const std::string& address, const int16_t port);
@@ -155,10 +163,9 @@ namespace Essentials
 
 			/// <summary>Configure the client</summary>
 			/// <param name="address"> -[in]- Address of the server</param>
-			/// <param name="sendPort"> -[in]- Send Port of the client</param>
-			/// <param name="recvPort"> -[in]- Receive port of the client</param>
+			/// <param name="port"> -[in]- Port of the client</param>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t Configure(const std::string& address, const int16_t sendPort, const int16_t recvPort);
+			int8_t Configure(const std::string& address, const int16_t port);
 
 			/// <summary>Add an enpoint to the list of multicast recepients.</summary>
 			/// <param name="ipAddress"> -[in]- IP address</param>
@@ -228,8 +235,7 @@ namespace Essentials
 			std::string					mTitle;					// Title for this utility when using CPP_Logger
 			UdpClientError				mLastError;				// Last error for this utility
 			std::string					mAddress;				// The clients IP address
-			int16_t						mSendPort;				// The Port to send on. 
-			int16_t						mRecvPort;				// The port to bind on.
+			int16_t						mPort;					// The Port to send on. 
 			sockaddr_in					mDestinationAddr;		// Destination sockaddr
 			sockaddr_in					mBroadcastAddr;			// Broadcast sockaddr
 			Endpoint*					mMulticastInfo;			// Multicast group
