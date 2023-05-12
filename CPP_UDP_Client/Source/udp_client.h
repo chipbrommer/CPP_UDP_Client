@@ -102,12 +102,14 @@ namespace Essentials
 			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::READ_FAILED) + ": Read failed.")},
 		};
 
+		/// <summary>Represents an endpoint for a connection</summary>
 		struct Endpoint
 		{
 			std::string ipAddress;
 			int16_t	port;
 		};
 
+		/// <summary>Send Type for the Send Function.</summary>
 		enum class SendType : uint8_t
 		{
 			NORMAL,
@@ -128,19 +130,32 @@ namespace Essentials
 			/// <summary>Default Deconstructor</summary>
 			~UDP_Client();
 
-			int8_t EnableBroadcast(bool onoff, const std::string& address = "");
+			/// <summary>A function to enable broadcasting</summary>
+			/// <param name="address"> -[in]- Address to broadcast on.</param>
+			/// <param name="port"> -[in]- Port to broadcast on</param>
+			//// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t EnableBroadcast(const std::string& address, const int16_t port);
 
-			int8_t SetBroadcastInfo(const std::string& address, const int16_t port);
+			/// <summary>Disables broadcast and cleans up</summary>
+			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t DisableBroadcast();
 
-			int8_t EnableMulticast(bool onoff, const std::string& multicastIP = "");
+			/// <summary></summary>
+			/// <param name="multicastIP"> -[in]- Address of multicast group.</param>
+			/// <param name="port"> -[in]- Port of multicast sender.</param>
+			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t EnableMulticast(const std::string& multicastIP, const int16_t port);
 
-			int8_t SetMulticastInfo(const std::string& address, const int16_t port);
+			/// <summary>Disables multicast and cleans up</summary>
+			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t DisableMulticast();
 
 			/// <summary>Configure the client</summary>
 			/// <param name="address"> -[in]- Address of the server</param>
-			/// <param name="port"> -[in]- Port of the server</param>
+			/// <param name="sendPort"> -[in]- Send Port of the client</param>
+			/// <param name="recvPort"> -[in]- Receive port of the client</param>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t Configure(const std::string& address, const int16_t sendPort, const int16_t recvPort, uint32_t bufferSize = UDP_CLIENT_MAX_BUFFER_SIZE);
+			int8_t Configure(const std::string& address, const int16_t sendPort, const int16_t recvPort);
 
 			/// <summary>Add an enpoint to the list of multicast recepients.</summary>
 			/// <param name="ipAddress"> -[in]- IP address</param>
@@ -176,7 +191,7 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t Receive(void* buffer, const uint8_t maxSize);
 
-			/// <summary>Closes a socket</summary>
+			/// <summary>Closes the client and clean up</summary>
 			void Close();
 
 			/// <summary>Get the ip address of the last received message.</summary>

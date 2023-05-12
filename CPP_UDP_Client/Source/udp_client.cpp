@@ -94,25 +94,32 @@ namespace Essentials
 			Close();
 		}
 
-		int8_t UDP_Client::EnableBroadcast(bool onoff, const std::string& multicastIP)
+		int8_t UDP_Client::EnableBroadcast(const std::string& multicastIP, const int16_t port)
 		{
-			if (setsockopt(mSocket, SOL_SOCKET, SO_BROADCAST, (char*)onoff, sizeof(char*)) < 0)
+			if(!mBroadcastEnabled)
 			{
-				//std::cerr << "Failed to enable broadcast." << std::endl;
-				return -1;
+				if (setsockopt(mSocket, SOL_SOCKET, SO_BROADCAST, (char*)1, sizeof(char*)) < 0)
+				{
+					//std::cerr << "Failed to enable broadcast." << std::endl;
+					return -1;
+				}
 			}
 
 			return 0;
 		}
 
-		int8_t UDP_Client::SetBroadcastInfo(const std::string& address, const int16_t port)
+		int8_t UDP_Client::DisableBroadcast()
 		{
+			if (!mBroadcastEnabled)
+			{
+				return -1;
+			}
 			return -1;
 		}
 
-		int8_t UDP_Client::EnableMulticast(bool onoff, const std::string& multicastIP)
+		int8_t UDP_Client::EnableMulticast(const std::string& multicastIP, const int16_t port)
 		{
-			if (onoff)
+			if (!mMulticastEnabled)
 			{
 				struct ip_mreq mreq;
 				mreq.imr_multiaddr.s_addr = inet_addr(multicastIP.c_str());
@@ -125,18 +132,19 @@ namespace Essentials
 			}
 			else
 			{
-				return -1;
+				DisableMulticast();
+				EnableMulticast(multicastIP, port);
 			}
 
 			return 0;
 		}
 
-		int8_t UDP_Client::SetMulticastInfo(const std::string& address, const int16_t port)
+		int8_t UDP_Client::DisableMulticast()
 		{
 			return -1;
 		}
 
-		int8_t UDP_Client::Configure(const std::string& address, const int16_t sendPort, const int16_t recvPort, uint32_t bufferSize)
+		int8_t UDP_Client::Configure(const std::string& address, const int16_t sendPort, const int16_t recvPort)
 		{
 			if (ValidateIP(address) >= 0)
 			{
@@ -271,11 +279,21 @@ namespace Essentials
 
 		int8_t UDP_Client::SendBroadcast(const char* buffer, const uint8_t size)
 		{
+			if (!mBroadcastEnabled)
+			{
+				return -1;
+			}
+
 			return -1;
 		}
 
 		int8_t UDP_Client::SendMulticast(const char* buffer, const uint8_t size)
 		{
+			if (!mMulticastEnabled)
+			{
+				return -1;
+			}
+
 			return -1;
 		}
 
