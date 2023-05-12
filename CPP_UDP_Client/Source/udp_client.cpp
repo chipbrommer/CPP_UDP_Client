@@ -25,12 +25,12 @@ namespace Essentials
 	{
 		UDP_Client::UDP_Client()
 		{
-			mTitle = "TCP Client";
+			mTitle = "UDP Client";
 			mLastError = UdpClientError::NONE;
 			mAddress = "";
 			mSendPort = -1;
 			mRecvPort = -1;
-			mBroadcastInfo = new Endpoint();
+			mBroadcastAddr = {};
 			mMulticastInfo = new Endpoint();
 			mLastReceiveInfo = new Endpoint();
 			mBroadcastEnabled = false;
@@ -44,7 +44,7 @@ namespace Essentials
 #endif
 		}
 
-		UDP_Client::UDP_Client(const std::string& address, const int16_t sendPort, const int16_t recvPort, uint32_t bufferSize)
+		UDP_Client::UDP_Client(const std::string& address, const int16_t sendPort, const int16_t recvPort)
 		{
 			if (ValidateIP(address) >= 0)
 			{
@@ -75,7 +75,7 @@ namespace Essentials
 
 			mTitle = "TCP Client";
 			mLastError = UdpClientError::NONE;
-			mBroadcastInfo = new Endpoint();
+			mBroadcastAddr = {};
 			mMulticastInfo = new Endpoint();
 			mLastReceiveInfo = new Endpoint();
 			mBroadcastEnabled = false;
@@ -92,28 +92,76 @@ namespace Essentials
 		UDP_Client::~UDP_Client()
 		{
 			Close();
+			CloseBroadcast();
 		}
 
-		int8_t UDP_Client::EnableBroadcast(const std::string& multicastIP, const int16_t port)
+		int8_t UDP_Client::EnableBroadcast(const std::string& address, const int16_t port)
 		{
 			if(!mBroadcastEnabled)
 			{
-				if (setsockopt(mSocket, SOL_SOCKET, SO_BROADCAST, (char*)1, sizeof(char*)) < 0)
+				// Open the broadcast socket
+				mBroadcastSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+				if (mBroadcastSocket == -1)
 				{
-					//std::cerr << "Failed to enable broadcast." << std::endl;
+					mLastError = UdpClientError::SOCKET_OPEN_FAILURE;
 					return -1;
 				}
+
+				// Setup broadcast addr
+				memset(reinterpret_cast<char*>(&mBroadcastAddr), 0, sizeof(mBroadcastAddr));
+				mBroadcastAddr.sin_family = AF_INET;
+				mBroadcastAddr.sin_port = htons(mSendPort);
+
+				// set broadcast address
+				if (inet_pton(AF_INET, address.c_str(), &(mBroadcastAddr.sin_addr)) <= 0)
+				{
+					mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
+					return -1;
+				}
+
+				// Connect to the server
+				if (connect(mBroadcastSocket, (struct sockaddr*)&mBroadcastAddr, sizeof(mBroadcastAddr)) < 0)
+				{
+					mLastError = UdpClientError::CONNECTION_FAILED;
+					CloseBroadcast();
+					return -1;
+				}
+
+				// set broadcast option
+				if (setsockopt(mBroadcastSocket, SOL_SOCKET, SO_BROADCAST, (char*)1, sizeof(char*)) < 0)
+				{
+					mLastError = UdpClientError::ENABLE_BROADCAST_FAILED;
+					return -1;
+				}
+
+				// success
+				mBroadcastEnabled = true;
+				return 0;
 			}
 
-			return 0;
+			// default return
+			return -1;
 		}
 
 		int8_t UDP_Client::DisableBroadcast()
 		{
-			if (!mBroadcastEnabled)
+			if (mBroadcastEnabled)
 			{
-				return -1;
+				if (setsockopt(mSocket, SOL_SOCKET, SO_BROADCAST, (char*)0, sizeof(char*)) < 0)
+				{
+					mLastError = UdpClientError::DISABLE_BROADCAST_FAILED;
+					return -1;
+				}
+
+				// success
+				mBroadcastEnabled = false;
+				memset(reinterpret_cast<char*>(&mBroadcastAddr), 0, sizeof(mBroadcastAddr));
+				CloseBroadcast();
+				return 0;
 			}
+
+			// default return
 			return -1;
 		}
 
@@ -121,26 +169,46 @@ namespace Essentials
 		{
 			if (!mMulticastEnabled)
 			{
-				struct ip_mreq mreq;
-				mreq.imr_multiaddr.s_addr = inet_addr(multicastIP.c_str());
+				ip_mreq mreq = {};
+
+				if (inet_pton(AF_INET, multicastIP.c_str(), &(mreq.imr_multiaddr.s_addr)) <= 0)
+				{
+					mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
+					return -1;
+				}
+
 				mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 				if (setsockopt(mSocket, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq)) < 0)
 				{
-					//std::cerr << "Failed to enable multicast." << std::endl;
+					mLastError = UdpClientError::ENABLE_MULTICAST_FAILED;
 					return -1;
 				}
-			}
-			else
-			{
-				DisableMulticast();
-				EnableMulticast(multicastIP, port);
+
+				// success
+				mMulticastEnabled = true;
+				return 0;
 			}
 
-			return 0;
+			// default return
+			return -1;
 		}
 
 		int8_t UDP_Client::DisableMulticast()
 		{
+			if (mMulticastEnabled)
+			{
+				if (setsockopt(mSocket, IPPROTO_IP, IP_MULTICAST_LOOP, (char*)0, sizeof(char*)) < 0)
+				{
+					mLastError = UdpClientError::DISABLE_MULTICAST_FAILED;
+					return -1;
+				}
+
+				// succss
+				mMulticastEnabled = false;
+				return 0;
+			}
+
+			// default return
 			return -1;
 		}
 
@@ -153,6 +221,7 @@ namespace Essentials
 			else
 			{
 				mLastError = UdpClientError::BAD_ADDRESS;
+				return -1;
 			}
 
 			if (ValidatePort(sendPort) == true)
@@ -162,6 +231,7 @@ namespace Essentials
 			else
 			{
 				mLastError = UdpClientError::BAD_PORT;
+				return -1;
 			}
 
 			if (ValidatePort(recvPort) == true)
@@ -171,6 +241,7 @@ namespace Essentials
 			else
 			{
 				mLastError = UdpClientError::BAD_PORT;
+				return -1;
 			}
 
 			return 0;
@@ -184,37 +255,58 @@ namespace Essentials
 			{
 				if (ValidatePort(port)) 
 				{
-					Endpoint endpoint(address, port);
+					sockaddr_in endpoint;
+					memset(&endpoint, 0, sizeof(endpoint));
+					endpoint.sin_family = AF_INET;
+					endpoint.sin_port = htons(port);
+
+					if (inet_pton(AF_INET, address.c_str(), &(endpoint.sin_addr)) <= 0) 
+					{
+						mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
+						return -1;
+					}
+
+					// success
 					mMulticastEndpoints.push_back(endpoint);
+					return 0;
 				}
 				else 
 				{
-					//std::cerr << "Invalid port for multicast endpoint: " << address << ":" << port << std::endl;
+					mLastError = UdpClientError::BAD_PORT;
 					return -1;
 				}
 			}
 			else 
 			{
-				//std::cerr << "Invalid multicast endpoint: " << address << std::endl;
+				mLastError = UdpClientError::BAD_ADDRESS;
 				return -1;
 			}
+
+			// Default return
+			return -1;
 		}
 
 		int8_t UDP_Client::Open()
 		{
-			if (mAddress == "\n" || mAddress.empty())
+			if (mSocket != -1)
+			{
+				mLastError = UdpClientError::CLIENT_ALREADY_CONNECTED;
+				return -1;
+			}
+
+			if (ValidateIP(mAddress) == -1)
 			{
 				mLastError = UdpClientError::ADDRESS_NOT_SET;
 				return -1;
 			}
 
-			if (mSendPort == -1)
+			if (!ValidatePort(mSendPort))
 			{
 				mLastError = UdpClientError::PORT_NOT_SET;
 				return -1;
 			}
 
-			if (mRecvPort == -1)
+			if (!ValidatePort(mRecvPort))
 			{
 				mLastError = UdpClientError::PORT_NOT_SET;
 				return -1;
@@ -226,87 +318,137 @@ namespace Essentials
 				mLastError = UdpClientError::WINSOCK_FAILURE;
 				return -1;
 			}
+#endif 
 
-			mSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-			if (mSocket == INVALID_SOCKET)
-			{
-				mLastError = UdpClientError::WINDOWS_SOCKET_OPEN_FAILURE;
-				WSACleanup();
-				return -1;
-			}
-#else
 			mSocket = socket(AF_INET, SOCK_STREAM, 0);
 
 			if (mSocket == -1)
 			{
-				mLastError = UdpClientError::LINUX_SOCKET_OPEN_FAILURE;
-				return -1;
-			}
-#endif
-			// Set up server details
-			sockaddr_in serverAddress{};
-			serverAddress.sin_family = AF_INET;
-			serverAddress.sin_port = htons(mSendPort);
-			if (inet_pton(AF_INET, mAddress.c_str(), &(serverAddress.sin_addr)) <= 0)
-			{
-				mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
+				mLastError = UdpClientError::SOCKET_OPEN_FAILURE;
 				return -1;
 			}
 
-			// Connect to the server
-			if (connect(mSocket, reinterpret_cast<struct sockaddr*>(&serverAddress), sizeof(serverAddress)) < 0)
+			// Setup destination addr
+			memset(reinterpret_cast<char*>(&mDestinationAddr), 0, sizeof(mDestinationAddr));
+			mDestinationAddr.sin_family = AF_INET;
+			mDestinationAddr.sin_port = htons(mSendPort);
+
+			// set destination address
+			if (inet_pton(AF_INET, mAddress.c_str(), &(mDestinationAddr.sin_addr)) <= 0)
 			{
-				mLastError = UdpClientError::CONNECTION_FAILED;
-				Close();
+				mLastError = UdpClientError::ADDRESS_NOT_SUPPORTED;
 				return -1;
 			}
 
 			return 0;
 		}
 
-		int8_t UDP_Client::Send(const char* buffer, const uint8_t size, const SendType type)
+		int8_t UDP_Client::Send(const char* buffer, const uint32_t size, const SendType type)
 		{
-			int sizeSent = send(mSocket, buffer, size, 0);
-			if (sizeSent < 0)
+			switch (type)
 			{
-				mLastError = UdpClientError::SEND_FAILED;
-				return -1;
+			case SendType::BROADCAST: return SendBroadcast(buffer, size); break;
+			case SendType::MULTICAST: return SendMulticast(buffer, size); break;
+			case SendType::UNICAST:	// Intientional fall through
+			default:					
+				{
+				// Send datagram over UDP
+				int32_t numSent = 0;
+				numSent = sendto(mSocket, buffer, size, 0, (struct sockaddr*)&mDestinationAddr, sizeof(sockaddr_in));
+
+				if (numSent == -1)
+				{
+					mLastError = UdpClientError::SEND_FAILED;
+					return -1;
+				}
+
+				// return success
+				return numSent;
+				}
 			}
 
-			return sizeSent;
+			// default return
+			return -1;
 		}
 
-		int8_t UDP_Client::SendBroadcast(const char* buffer, const uint8_t size)
+		int8_t UDP_Client::SendBroadcast(const char* buffer, const uint32_t size)
 		{
-			if (!mBroadcastEnabled)
+			if (mBroadcastEnabled && mBroadcastSocket != -1)
 			{
-				return -1;
+				int32_t numSent = 0;
+				numSent = sendto(mBroadcastSocket, buffer, size, 0, (struct sockaddr*)&mBroadcastAddr, sizeof(mBroadcastAddr));
+
+				if (numSent == -1)
+				{
+					mLastError = UdpClientError::SEND_BROADCAST_FAILED;
+					return -1;
+				}
+
+				// return success
+				return numSent;
 			}
 
 			return -1;
 		}
 
-		int8_t UDP_Client::SendMulticast(const char* buffer, const uint8_t size)
+		int8_t UDP_Client::SendMulticast(const char* buffer, const uint32_t size)
 		{
-			if (!mMulticastEnabled)
+			if (mMulticastEnabled)
 			{
-				return -1;
+				int32_t numSent = 0;
+				for (const auto& endpoint : mMulticastEndpoints) 
+				{
+					numSent = sendto(mSocket, buffer, size, 0, (struct sockaddr*)&endpoint, sizeof(endpoint));
+
+					if (numSent < 0)
+					{
+						mLastError = UdpClientError::SEND_MULTICAST_FAILED;
+						return false;
+					}
+				}
+
+				return numSent;
 			}
 
 			return -1;
 		}
 
-		int8_t UDP_Client::Receive(void* buffer, const uint8_t maxSize)
+		int8_t UDP_Client::Receive(void* buffer, const uint32_t maxSize)
 		{
-			int sizeRead = recv(mSocket, (char*)buffer, maxSize, 0);
-			if (sizeRead < 0)
+			// Store the data source info
+			sockaddr_in sourceAddress;
+			int addressLength = sizeof(sourceAddress);
+
+			// Hold return value from receiving
+			int32_t sizeRead = 0;
+
+			// Receive datagram over UDP
+#if defined WIN32
+			sizeRead = static_cast<int>(recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize, 0, (struct sockaddr*)&sourceAddress, &addressLength));
+#elif defined __linux___
+			sizeRead = static_cast<int>(recvfrom(mSocket, buffer, maxSize, 0, (struct sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength)));
+#endif
+
+			// Check for error
+			if (sizeRead == -1)
 			{
 				mLastError = UdpClientError::READ_FAILED;
 				return -1;
 			}
 
-			// Copy temp buffer into param buffer and return size read. 
+			// if data was received, store the port and ip for history. 
+			if (sizeRead > 0)
+			{
+				mLastReceiveInfo->port = ntohs(sourceAddress.sin_port);
+
+				char addy[INET_ADDRSTRLEN];
+				if (inet_ntop(AF_INET, &(sourceAddress.sin_addr), addy, INET_ADDRSTRLEN) != NULL)
+				{
+					mLastReceiveInfo->ipAddress = addy;
+				}
+			}
+
+			// return size read
 			return sizeRead;
 		}
 
@@ -314,11 +456,22 @@ namespace Essentials
 		{
 #ifdef WIN32
 			closesocket(mSocket);
-			WSACleanup();
 			mSocket = INVALID_SOCKET;
+			WSACleanup();
 #else
 			close(mSocket);
 			mSocket = -1;
+#endif
+		}
+
+		void UDP_Client::CloseBroadcast()
+		{
+#ifdef WIN32
+			closesocket(mBroadcastSocket);
+			mBroadcastSocket = INVALID_SOCKET;
+#else
+			close(mBroadcastSocket);
+			mBroadcastSocket = -1;
 #endif
 		}
 
@@ -339,8 +492,8 @@ namespace Essentials
 	
 		int8_t UDP_Client::ValidateIP(const std::string& ip)
 		{
-			struct sockaddr_in sa4;
-			struct sockaddr_in6 sa6;
+			sockaddr_in sa4 = {};
+			sockaddr_in6 sa6 = {};
 
 			// Check if it's a valid IPv4 address
 			if (inet_pton(AF_INET, ip.c_str(), &(sa4.sin_addr)) == 1)

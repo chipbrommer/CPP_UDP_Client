@@ -63,12 +63,17 @@ namespace Essentials
 			CLIENT_ALREADY_CONNECTED,
 			FAILED_TO_CONNECT,
 			WINSOCK_FAILURE,
-			WINDOWS_SOCKET_OPEN_FAILURE,
-			LINUX_SOCKET_OPEN_FAILURE,
+			SOCKET_OPEN_FAILURE,
 			ADDRESS_NOT_SUPPORTED,
 			CONNECTION_FAILED,
 			SEND_FAILED,
 			READ_FAILED,
+			ENABLE_MULTICAST_FAILED,
+			DISABLE_MULTICAST_FAILED,
+			ENABLE_BROADCAST_FAILED,
+			DISABLE_BROADCAST_FAILED,
+			SEND_MULTICAST_FAILED,
+			SEND_BROADCAST_FAILED,
 		};
 
 		/// <summary>Error enum to string map</summary>
@@ -88,10 +93,8 @@ namespace Essentials
 			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::FAILED_TO_CONNECT) + ": Failed to connect.")},
 			{UdpClientError::WINSOCK_FAILURE,
 			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::WINSOCK_FAILURE) + ": Winsock creation failure.")},
-			{UdpClientError::WINDOWS_SOCKET_OPEN_FAILURE,
-			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::WINDOWS_SOCKET_OPEN_FAILURE) + ": Socket open failure.")},
-			{UdpClientError::LINUX_SOCKET_OPEN_FAILURE,
-			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::LINUX_SOCKET_OPEN_FAILURE) + ": Socket open failure.")},
+			{UdpClientError::SOCKET_OPEN_FAILURE,
+			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::SOCKET_OPEN_FAILURE) + ": Socket open failure.")},
 			{UdpClientError::ADDRESS_NOT_SUPPORTED,
 			std::string("Error Code " + std::to_string((uint8_t)UdpClientError::ADDRESS_NOT_SUPPORTED) + ": Address not supported.")},
 			{UdpClientError::CONNECTION_FAILED,
@@ -105,14 +108,14 @@ namespace Essentials
 		/// <summary>Represents an endpoint for a connection</summary>
 		struct Endpoint
 		{
-			std::string ipAddress;
-			int16_t	port;
+			std::string ipAddress = "";
+			int16_t	port = 0;
 		};
 
 		/// <summary>Send Type for the Send Function.</summary>
 		enum class SendType : uint8_t
 		{
-			NORMAL,
+			UNICAST,
 			BROADCAST,
 			MULTICAST,
 		};
@@ -125,7 +128,7 @@ namespace Essentials
 			UDP_Client();
 
 			/// <summary>Constructor to receive an address and port</summary>
-			UDP_Client(const std::string& address, const int16_t sendPort, const int16_t recvPort, uint32_t bufferSize = UDP_CLIENT_MAX_BUFFER_SIZE);
+			UDP_Client(const std::string& address, const int16_t sendPort, const int16_t recvPort);
 
 			/// <summary>Default Deconstructor</summary>
 			~UDP_Client();
@@ -171,28 +174,31 @@ namespace Essentials
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
 			/// <param name="size"> -[in]- Size to be sent</param>
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t Send(const char* buffer, const uint8_t size, const SendType type = SendType::NORMAL);
+			int8_t Send(const char* buffer, const uint32_t size, const SendType type = SendType::UNICAST);
 
 			/// <summary>Send a broadcast message</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
 			/// <param name="size"> -[in]- Size to be sent</param>
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t SendBroadcast(const char* buffer, const uint8_t size);
+			int8_t SendBroadcast(const char* buffer, const uint32_t size);
 
 			/// <summary>Send a multicast message.</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
 			/// <param name="size"> -[in]- Size to be sent</param>
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t SendMulticast(const char* buffer, const uint8_t size);
+			int8_t SendMulticast(const char* buffer, const uint32_t size);
 
 			/// <summary>Receive data from a server</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
 			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t Receive(void* buffer, const uint8_t maxSize);
+			int8_t Receive(void* buffer, const uint32_t maxSize);
 
-			/// <summary>Closes the client and clean up</summary>
+			/// <summary>Closes the client and cleans up</summary>
 			void Close();
+
+			/// <summary>Closes the broadcast client and cleans up</summary>
+			void CloseBroadcast();
 
 			/// <summary>Get the ip address of the last received message.</summary>
 			/// <returns>If valid, A string containing the IP address; else an empty string. Call UDP_Client::GetLastError to find out more.</returns>
@@ -219,24 +225,24 @@ namespace Essentials
 			bool ValidatePort(const int16_t port);
 
 			// Variables
-			std::string				mTitle;				// Title for this utility when using CPP_Logger
-			UdpClientError			mLastError;			// Last error for this utility
-			std::string				mAddress;			// The clients IP address
-			int16_t					mSendPort;			// The Port to send on. 
-			int16_t					mRecvPort;			// The port to bind on.
-			Endpoint*				mBroadcastInfo;		// Broadcast enpoint
-			Endpoint*				mMulticastInfo;		// Multicast group
-			Endpoint*				mLastReceiveInfo;	// Last receive endpoint info
-			std::vector<Endpoint>	mMulticastEndpoints;// List of multicast endpoints
-			bool					mBroadcastEnabled;	// Flag for enabled/disabled broadcast
-			bool					mMulticastEnabled;	// Flag for enabled/disabled multicast
+			std::string					mTitle;					// Title for this utility when using CPP_Logger
+			UdpClientError				mLastError;				// Last error for this utility
+			std::string					mAddress;				// The clients IP address
+			int16_t						mSendPort;				// The Port to send on. 
+			int16_t						mRecvPort;				// The port to bind on.
+			sockaddr_in					mDestinationAddr;		// Destination sockaddr
+			sockaddr_in					mBroadcastAddr;			// Broadcast sockaddr
+			Endpoint*					mMulticastInfo;			// Multicast group
+			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
+			std::vector<sockaddr_in>	mMulticastEndpoints;	// List of multicast endpoints
+			bool						mBroadcastEnabled;		// Flag for enabled/disabled broadcast
+			bool						mMulticastEnabled;		// Flag for enabled/disabled multicast
 
 #ifdef WIN32
-			WSADATA					mWsaData;			// Windows winsock data
-			SOCKET					mSocket;			// Windows socket FD
-#else
-			int32_t					mSocket;			// Linux socket FD
+			WSADATA						mWsaData;				// Winsock data
 #endif
+			SOCKET						mSocket;				// socket FD
+			SOCKET						mBroadcastSocket;		// Broadcast socket FD
 		};
 	}
 }
