@@ -4,6 +4,8 @@
 #include <iostream>
 #include "Source/udp_client.h"
 
+#define BROADCAST_TEST
+
 int main()
 {
 	std::cout << "Hello CMake." << std::endl;
@@ -12,10 +14,11 @@ int main()
 	//udp->Configure("127.0.0.1",8080);
 	//udp->Open();
 	//std::cout << udp->GetLastError();
-	udp->EnableBroadcast(5700);
+	udp->EnableBroadcast(8080);
 	std::cout << udp->GetLastError();
 
-	char buffer[10] = { 0 };
+	std::string buffer = "Hello Receiver!";
+	std::string buffer2 = "Hello Again!";
 
 	struct msg
 	{
@@ -39,14 +42,24 @@ int main()
 		//	sendcount++;
 		//}
 
-		if (udp->Send(buffer, sizeof(buffer), Essentials::Communications::SendType::BROADCAST) < 1)
+#ifdef BROADCAST_TEST
+		if (udp->Send(buffer.c_str(), buffer.length(), Essentials::Communications::SendType::BROADCAST) < 1)
 		{
 			std::cout << "FAIL: " << udp->GetLastError() << std::endl;
+		}
+
+		if (udp->SendBroadcast(buffer2.c_str(), buffer2.length()) < 1)
+		{
+			std::cout << "FAIL 2: " << udp->GetLastError() << std::endl;
 		}
 		else
 		{
 			sendcount++;
 		}
+#elif defined UNICAST_TEST
+#elif defined MULTICAST_TEST
+#endif // BROADCAST_TEST
+
 	}
 
 	return 0;

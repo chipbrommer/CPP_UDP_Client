@@ -33,7 +33,10 @@ namespace Essentials
 			mLastReceiveInfo	= new Endpoint();
 
 #ifdef WIN32
-			mWsaData			= {};
+			if (WSAStartup(MAKEWORD(2, 2), &mWsaData) != 0) 
+			{
+				mLastError = UdpClientError::WINSOCK_FAILURE;
+			}
 #endif
 			mSocket				= INVALID_SOCKET;
 			mBroadcastSocket	= INVALID_SOCKET;
@@ -66,7 +69,10 @@ namespace Essentials
 			mBroadcastAddr		= {};
 
 #ifdef WIN32
-			mWsaData			= {};
+			if (WSAStartup(MAKEWORD(2, 2), &mWsaData) != 0)
+			{
+				mLastError = UdpClientError::WINSOCK_FAILURE;
+			}
 #endif
 			mSocket				= INVALID_SOCKET;
 			mBroadcastSocket	= INVALID_SOCKET;
