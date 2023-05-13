@@ -18,24 +18,24 @@ int main()
 	{
 		std::cout << udp->GetLastError();
 	}
+	std::string buffer = "Hello World!";
+	std::string buffer2 = "Hello From Broadcasting!";
+
 #elif defined UNICAST_TEST
 #elif defined MULTICAST_TEST
 	if (udp->EnableMulticast("239.255.0.1", 8888) < 0)
 	{
 		std::cout << udp->GetLastError();
 	}
-#endif // BROADCAST_TEST
-	std::string buffer = "Hello Receiver!";
-	std::string buffer2 = "Hello Again!";
 
-	struct msg
+	if (udp->AddMulticastGroup("239.255.0.2", 8880) < 0)
 	{
-		int8_t iA;
-		int8_t iB;
-		int32_t test;
-	};
+		std::cout << udp->GetLastError();
+	}
 
-	msg MSG = { 1,1,36 };
+	std::string buffer = "Hello Group!";
+	std::string buffer2 = "Hello From Multicasting!";
+#endif // BROADCAST_TEST
 
 	int sendcount = 0;
 
