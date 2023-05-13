@@ -82,6 +82,15 @@ namespace Essentials
 			DISABLE_BROADCAST_FAILED,
 			SEND_MULTICAST_FAILED,
 			SEND_BROADCAST_FAILED,
+			CONFIGURATION_FAILED,
+			SET_DESTINATION_FAILED,
+			BIND_FAILED,
+			BROADCAST_ALREADY_ENABLED,
+			BROADCAST_SOCKET_OPEN_FAILURE,
+			BROADCAST_NOT_ENABLED,
+			MULTICAST_SOCKET_FAILED,
+			BAD_MULTICAST_ADDRESS
+
 		};
 
 		/// <summary>Error enum to string map</summary>
@@ -136,52 +145,69 @@ namespace Essentials
 			UDP_Client();
 
 			/// <summary>Constructor to receive an address and port</summary>
-			UDP_Client(const std::string& address, const int16_t port);
+			UDP_Client(const std::string& clientsAddress, const int16_t clientsPort);
 
 			/// <summary>Default Deconstructor</summary>
 			~UDP_Client();
 
+			/// <summary>Configure the address and port of this client</summary>
+			/// <param name="address"> -[in]- Address of this client</param>
+			/// <param name="port"> -[in]- Address of this client</param>
+			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t ConfigureThisClient(const std::string& address, const int16_t port);
+
+			/// <summary>Set this unicast destination</summary>
+			/// <param name="address"> -[in]- Address to sent to</param>
+			/// <param name="port"> -[in]- Port to sent to</param>
+			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t SetDestination(const std::string& address, const int16_t port);
+
 			/// <summary>A function to enable broadcasting</summary>
-			/// <param name="address"> -[in]- Address to broadcast on, send empty string to broadcast on all addresses.</param>
 			/// <param name="port"> -[in]- Port to broadcast on</param>
 			//// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t EnableBroadcast(const std::string& address, const int16_t port);
+			int8_t EnableBroadcast(const int16_t port);
 
 			/// <summary>Disables broadcast and cleans up</summary>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
 			int8_t DisableBroadcast();
 
-			/// <summary></summary>
-			/// <param name="multicastIP"> -[in]- Address of multicast group.</param>
-			/// <param name="port"> -[in]- Port of multicast sender.</param>
+			/// <summary>Enables multicast sockets and adds the first group. To add more groups, use AddMulticastGroup</summary>
+			/// <param name="groupIP"> -[in]- Address of multicast group.</param>
+			/// <param name="groupPort"> -[in]- Port of multicast group.</param>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t EnableMulticast(const std::string& multicastIP, const int16_t port);
+			int8_t EnableMulticast(const std::string& groupIP, const int16_t groupPort);
 
 			/// <summary>Disables multicast and cleans up</summary>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
 			int8_t DisableMulticast();
 
-			/// <summary>Configure the client</summary>
-			/// <param name="address"> -[in]- Address of the server</param>
-			/// <param name="port"> -[in]- Port of the client</param>
-			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t Configure(const std::string& address, const int16_t port);
-
 			/// <summary>Add an enpoint to the list of multicast recepients.</summary>
-			/// <param name="ipAddress"> -[in]- IP address</param>
-			/// <param name="port"> -[in]- Port</param>
+			/// <param name="groupIP"> -[in]- Address of multicast group.</param>
+			/// <param name="groupPort"> -[in]- Port of multicast group.</param>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t AddMulticastEndpoint(const std::string& ipAddress, const int16_t port);
+			int8_t AddMulticastGroup(const std::string& groupIP, const int16_t port);
 
-			/// <summary>Opens the UDP socket at the set address and ports</summary>
+			/// <summary>Opens the UDP unicast socket and binds it to the set address and port</summary>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
 			int8_t Open();
 
-			/// <summary>Send a message. Default is normal, can specify Broadcase or Multicast for ease of use.</summary>
+			/// <summary>Send a message over a specified socket type</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
 			/// <param name="size"> -[in]- Size to be sent</param>
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t Send(const char* buffer, const uint32_t size, const SendType type = SendType::UNICAST);
+			int8_t Send(const char* buffer, const uint32_t size, const SendType type);
+
+			/// <summary>Sends a unicast message</summary>
+			/// <param name="buffer"> -[in]- Buffer to be sent</param>
+			/// <param name="size"> -[in]- Size to be sent</param>
+			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t SendUnicast(const char* buffer, const uint32_t size);
+
+			/// <summary>Send a unicast message to specified ip and port</summary>
+			/// <param name="buffer"> -[in]- Buffer to be sent</param>
+			/// <param name="size"> -[in]- Size to be sent</param>
+			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t SendUnicast(const char* buffer, const uint32_t size, const std::string& ipAddress, const int16_t port);
 
 			/// <summary>Send a broadcast message</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
@@ -189,11 +215,18 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t SendBroadcast(const char* buffer, const uint32_t size);
 
-			/// <summary>Send a multicast message.</summary>
+			/// <summary>Send a multicast message to all joined groups</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
 			/// <param name="size"> -[in]- Size to be sent</param>
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t SendMulticast(const char* buffer, const uint32_t size);
+
+			/// <summary>Send a multicast message to a particular group already joined</summary>
+			/// <param name="buffer"> -[in]- Buffer to be sent</param>
+			/// <param name="size"> -[in]- Size to be sent</param>
+			/// <param name="groupIP"> -[in]- IP of group to send to</param>
+			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t SendMulticast(const char* buffer, const uint32_t size, const std::string& groupIP);
 
 			/// <summary>Receive data from a server</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
@@ -201,11 +234,29 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t Receive(void* buffer, const uint32_t maxSize);
 
-			/// <summary>Closes the client and cleans up</summary>
-			void Close();
+			/// <summary>Receive data from a server and get the IP and Port of the sender</summary>
+			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
+			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
+			/// <param name="recvFromAddr"> -[out]- IP Address of the sender</param>
+			/// <param name="recvFromPort"> -[out]- Port of the sender</param>
+			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t Receive(void* buffer, const uint32_t maxSize, std::string& recvFromAddr, int16_t& recvFromPort);
+
+			/// <summary>Receive a multicast message</summary>
+			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
+			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
+			/// <param name="multicastGroup"> -[out]- IP of the group received from</param>
+			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t ReceiveMulticast(void* buffer, const uint32_t maxSize, std::string& multicastGroup);
+
+			/// <summary>Closes the unicast client and cleans up</summary>
+			void CloseUnicast();
 
 			/// <summary>Closes the broadcast client and cleans up</summary>
 			void CloseBroadcast();
+
+			/// <summary>Closes the broadcast client and cleans up</summary>
+			void CloseMulticast();
 
 			/// <summary>Get the ip address of the last received message.</summary>
 			/// <returns>If valid, A string containing the IP address; else an empty string. Call UDP_Client::GetLastError to find out more.</returns>
@@ -234,21 +285,18 @@ namespace Essentials
 			// Variables
 			std::string					mTitle;					// Title for this utility when using CPP_Logger
 			UdpClientError				mLastError;				// Last error for this utility
-			std::string					mAddress;				// The clients IP address
-			int16_t						mPort;					// The Port to send on. 
 			sockaddr_in					mDestinationAddr;		// Destination sockaddr
+			sockaddr_in					mClientAddr;			// This clients sockaddr
 			sockaddr_in					mBroadcastAddr;			// Broadcast sockaddr
-			Endpoint*					mMulticastInfo;			// Multicast group
 			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
 			std::vector<sockaddr_in>	mMulticastEndpoints;	// List of multicast endpoints
-			bool						mBroadcastEnabled;		// Flag for enabled/disabled broadcast
-			bool						mMulticastEnabled;		// Flag for enabled/disabled multicast
 
 #ifdef WIN32
 			WSADATA						mWsaData;				// Winsock data
 #endif
-			SOCKET						mSocket;				// socket FD
-			SOCKET						mBroadcastSocket;		// Broadcast socket FD
+			SOCKET						mSocket;				// socket FD for this client
+			SOCKET						mBroadcastSocket;		// socket FD for broadcasting
+			std::vector<SOCKET>			mMulticastSockets;		// socket FDs for multicasting
 		};
 	}
 }

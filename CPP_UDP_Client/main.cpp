@@ -12,7 +12,7 @@ int main()
 	//udp->Configure("127.0.0.1",8080);
 	//udp->Open();
 	//std::cout << udp->GetLastError();
-	udp->EnableBroadcast("", 5700);
+	udp->EnableBroadcast(5700);
 	std::cout << udp->GetLastError();
 
 	char buffer[10] = { 0 };
@@ -47,8 +47,6 @@ int main()
 		{
 			sendcount++;
 		}
-
-		Sleep(200);
 	}
 
 	return 0;
