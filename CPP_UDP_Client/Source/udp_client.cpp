@@ -544,6 +544,11 @@ namespace Essentials
 			return -1;
 		}
 
+		int8_t UDP_Client::ReceiveFromSpecificMulticastGroup(void* buffer, const uint32_t maxSize, std::string multicastGroup)
+		{
+			return -1;
+		}
+
 		void UDP_Client::CloseUnicast()
 		{
 			closesocket(mSocket);

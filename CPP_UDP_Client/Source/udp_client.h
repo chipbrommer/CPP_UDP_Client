@@ -251,6 +251,13 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t ReceiveMulticast(void* buffer, const uint32_t maxSize, std::string& multicastGroup);
 
+			/// <summary>Receive a multicast message from a specific group</summary>
+			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
+			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
+			/// <param name="multicastGroup"> -[in]- IP of the group received from</param>
+			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t ReceiveFromSpecificMulticastGroup(void* buffer, const uint32_t maxSize, std::string multicastGroup);
+
 			/// <summary>Closes the unicast client and cleans up</summary>
 			void CloseUnicast();
 
