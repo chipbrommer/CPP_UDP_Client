@@ -267,6 +267,14 @@ namespace Essentials
 				return -1;
 			}
 
+			// Set reuseable address. 
+			int8_t opt = 1;
+			if (setsockopt(tempSock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0)
+			{
+				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
+				return -1;
+			}
+
 			if (setsockopt(tempSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&mreq, sizeof(mreq)) == SOCKET_ERROR)
 			{
 				closesocket(tempSock);
@@ -287,19 +295,41 @@ namespace Essentials
 				return -1;
 			}
 
-#ifdef WIN32
-			if (WSAStartup(MAKEWORD(2, 2), &mWsaData) != 0)
-			{
-				mLastError = UdpClientError::WINSOCK_FAILURE;
-				return -1;
-			}
-#endif 
-
 			mSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
-			if (mSocket == -1)
+			if (mSocket == INVALID_SOCKET)
 			{
 				mLastError = UdpClientError::SOCKET_OPEN_FAILURE;
+				return -1;
+			}
+
+			// Set as nonblocking socket
+#ifdef WIN32
+			u_long nonBlockingMode = 1;
+			if (ioctlsocket(mSocket, FIONBIO, &nonBlockingMode) != 0)
+			{
+				mLastError = UdpClientError::FAILED_TO_SET_NONBLOCK;
+				return -1;
+			}
+#else
+			int flags = fcntl(mSocket, F_GETFL, 0);
+			if (flags == -1)
+			{
+				mLastError = UdpClientError::FAILED_TO_GET_SOCKET_FLAGS;
+				return -1;
+			}
+
+			if (fcntl(mSocket, F_SETFL, flags | O_NONBLOCK) == -1)
+			{
+				mLastError = UdpClientError::FAILED_TO_SET_NONBLOCK;
+				return -1;
+			}
+#endif
+			// Set reuseable address. 
+			int8_t opt = 1;
+			if (setsockopt(mSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0)
+			{
+				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
 				return -1;
 			}
 
@@ -331,8 +361,7 @@ namespace Essentials
 			// verify socket and then send datagram
 			if (mSocket != INVALID_SOCKET)
 			{
-				int32_t numSent = 0;
-				numSent = sendto(mSocket, buffer, size, 0, (struct sockaddr*)&mDestinationAddr, sizeof(mDestinationAddr));
+				int32_t numSent = sendto(mSocket, buffer, size, 0, (struct sockaddr*)&mDestinationAddr, sizeof(mDestinationAddr));
 
 				if (numSent == -1)
 				{
@@ -398,8 +427,7 @@ namespace Essentials
 			// verify socket and then send datagram
 			if (mBroadcastSocket != INVALID_SOCKET)
 			{
-				int32_t numSent = 0;
-				numSent = sendto(mBroadcastSocket, buffer, size, 0, (struct sockaddr*)&mBroadcastAddr, sizeof(sockaddr_in));
+				int32_t numSent = sendto(mBroadcastSocket, buffer, size, 0, (struct sockaddr*)&mBroadcastAddr, sizeof(sockaddr_in));
 
 				if (numSent == -1)
 				{
@@ -449,27 +477,37 @@ namespace Essentials
 			return -1;
 		}
 
-		int8_t UDP_Client::Receive(void* buffer, const uint32_t maxSize)
+		int8_t UDP_Client::ReceiveUnicast(void* buffer, const uint32_t maxSize)
 		{
 			// Store the data source info
 			sockaddr_in sourceAddress{};
 			int addressLength = sizeof(sourceAddress);
 
-			// Hold return value from receiving
-			int32_t sizeRead = 0;
-
 			// Receive datagram over UDP
 #if defined WIN32
-			sizeRead = static_cast<int>(recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize, 0, (struct sockaddr*)&sourceAddress, &addressLength));
+			int32_t sizeRead = static_cast<int>(recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize-1, 0, (struct sockaddr*)&sourceAddress, &addressLength));
 #else
-			sizeRead = static_cast<int>(recvfrom(mSocket, buffer, maxSize, 0, (struct sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength)));
+			int32_t sizeRead = static_cast<int>(recvfrom(mSocket, buffer, maxSize-1, 0, (struct sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength)));
 #endif
 
 			// Check for error
 			if (sizeRead == -1)
 			{
-				mLastError = UdpClientError::READ_FAILED;
-				return -1;
+#ifdef WIN32
+				int errorCode = WSAGetLastError();
+				if (errorCode != WSAEWOULDBLOCK)
+				{
+					mLastError = UdpClientError::READ_FAILED;
+					return -1;
+				}
+#else
+				if (errno != EWOULDBLOCK)
+				{
+					mLastError = UdpClientError::READ_FAILED;
+					return -1;
+				}
+#endif
+				return 0;
 			}
 
 			// if data was received, store the port and ip for history. 
@@ -477,10 +515,10 @@ namespace Essentials
 			{
 				mLastReceiveInfo->port = ntohs(sourceAddress.sin_port);
 
-				char addy[INET_ADDRSTRLEN];
-				if (inet_ntop(AF_INET, &(sourceAddress.sin_addr), addy, INET_ADDRSTRLEN) != NULL)
+				char addr[INET_ADDRSTRLEN];
+				if (inet_ntop(AF_INET, &(sourceAddress.sin_addr), addr, INET_ADDRSTRLEN) != NULL)
 				{
-					mLastReceiveInfo->ipAddress = addy;
+					mLastReceiveInfo->ipAddress = addr;
 				}
 			}
 
@@ -488,9 +526,17 @@ namespace Essentials
 			return sizeRead;
 		}
 
-		int8_t UDP_Client::Receive(void* buffer, const uint32_t maxSize, std::string& recvFromAddr, int16_t& recvFromPort)
+		int8_t UDP_Client::ReceiveUnicast(void* buffer, const uint32_t maxSize, std::string& recvFromAddr, int16_t& recvFromPort)
 		{
-			return -1;
+			int8_t rtn = ReceiveUnicast(buffer, maxSize);
+
+			if (rtn > 0)
+			{
+				recvFromAddr = GetIpOfLastReceive();
+				recvFromPort = GetPortOfLastReceive();
+			}
+
+			return rtn;;
 		}
 
 		int8_t UDP_Client::ReceiveMulticast(void* buffer, const uint32_t maxSize, std::string& multicastGroup)

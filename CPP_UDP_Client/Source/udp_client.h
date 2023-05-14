@@ -24,6 +24,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 typedef int SOCKET;
 typedef struct sockaddr_in SOCKADDR_IN;
 typedef struct sockaddr SOCKADDR;
@@ -52,7 +53,6 @@ namespace Essentials
 		constexpr static uint8_t	UDP_CLIENT_VERSION_MINOR	= 1;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_PATCH	= 0;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_BUILD	= 0;
-		constexpr static uint32_t	UDP_CLIENT_MAX_BUFFER_SIZE	= 65536;
 
 		static std::string UdpClientVersion = "UDP Client v" +
 			std::to_string((uint8_t)UDP_CLIENT_VERSION_MAJOR) + "." +
@@ -89,8 +89,10 @@ namespace Essentials
 			BROADCAST_SOCKET_OPEN_FAILURE,
 			BROADCAST_NOT_ENABLED,
 			MULTICAST_SOCKET_FAILED,
-			BAD_MULTICAST_ADDRESS
-
+			BAD_MULTICAST_ADDRESS,
+			FAILED_TO_SET_NONBLOCK,
+			FAILED_TO_GET_SOCKET_FLAGS,
+			ENABLE_REUSEADDR_FAILED,
 		};
 
 		/// <summary>Error enum to string map</summary>
@@ -232,7 +234,7 @@ namespace Essentials
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
 			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t Receive(void* buffer, const uint32_t maxSize);
+			int8_t ReceiveUnicast(void* buffer, const uint32_t maxSize);
 
 			/// <summary>Receive data from a server and get the IP and Port of the sender</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
@@ -240,7 +242,7 @@ namespace Essentials
 			/// <param name="recvFromAddr"> -[out]- IP Address of the sender</param>
 			/// <param name="recvFromPort"> -[out]- Port of the sender</param>
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t Receive(void* buffer, const uint32_t maxSize, std::string& recvFromAddr, int16_t& recvFromPort);
+			int8_t ReceiveUnicast(void* buffer, const uint32_t maxSize, std::string& recvFromAddr, int16_t& recvFromPort);
 
 			/// <summary>Receive a multicast message</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
