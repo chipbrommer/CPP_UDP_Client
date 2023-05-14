@@ -132,7 +132,7 @@ int main()
 		else if(bytesReceived > 0)
 		{
 			buffer[bytesReceived] = '\0'; // Null-terminate the received data
-			std::cout << "Received data from: " << udp->GetIpOfLastReceive() << std::endl;
+			std::cout << "Received data from: " << udp->GetIpOfLastReceive() << ":" << udp->GetPortOfLastReceive() << ": " << buffer << std::endl;
 		}
 		else
 		{
