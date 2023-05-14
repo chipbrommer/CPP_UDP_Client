@@ -143,7 +143,7 @@ namespace Essentials
 			return 0;
 		}
 
-		int8_t UDP_Client::EnableBroadcast(const int16_t port)
+		int8_t UDP_Client::EnableBroadcastSender(const int16_t port)
 		{
 			if(mBroadcastSocket != INVALID_SOCKET)
 			{
@@ -181,6 +181,42 @@ namespace Essentials
 			}
 
 			// success
+			return 0;
+		}
+
+		int8_t UDP_Client::AddBroadcastListener(const int16_t port)
+		{
+			SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+
+			if (sock == INVALID_SOCKET)
+			{
+				mLastError = UdpClientError::BROADCAST_SOCKET_OPEN_FAILURE;
+				return -1;
+			}
+
+			// Set the receive timeout to 100ms
+			mTimeout.tv_sec = UDP_SOCKET_TIMEOUT / 1000;
+			mTimeout.tv_usec = (UDP_SOCKET_TIMEOUT % 1000) * 1000;
+
+			if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&mTimeout), sizeof(mTimeout)) == SOCKET_ERROR) 
+			{
+				mLastError = UdpClientError::FAILED_TO_SET_TIMEOUT;
+				return -1;
+			}
+
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			addr.sin_addr.s_addr = INADDR_ANY;
+
+			if (bind(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == SOCKET_ERROR)
+			{
+				mLastError = UdpClientError::BIND_FAILED;
+				return -1;
+			}
+
+			mBroadcastEndpoints.push_back(addr);
+			mBroadcastListeners.push_back(sock);
 			return 0;
 		}
 
@@ -539,6 +575,68 @@ namespace Essentials
 			return rtn;;
 		}
 
+		int8_t UDP_Client::ReceiveBroadcast(void* buffer, const uint32_t maxSize)
+		{
+			if (mBroadcastListeners.size() > 0)
+			{
+				for (int i = 0; i < mBroadcastListeners.size(); i++)
+				{
+					SOCKET sock = mBroadcastListeners[i];
+					sockaddr_in endpoint = mBroadcastEndpoints[i];
+					int endpointSize = sizeof(endpoint);
+					fd_set readSet{};
+					FD_ZERO(&readSet);
+					FD_SET(sock, &readSet);
+					int selectResult = select((int)sock + 1, &readSet, nullptr, nullptr, &mTimeout);
+
+					if (selectResult == SOCKET_ERROR)
+					{
+						mLastError = UdpClientError::SELECT_READ_ERROR;
+						return 1;
+					}
+
+					if (selectResult > 0)
+					{
+						int receivedBytes = recvfrom(sock, (char*)buffer, sizeof(buffer) - 1, 0,
+							reinterpret_cast<sockaddr*>(&endpoint),
+							&endpointSize);
+
+						if (receivedBytes == SOCKET_ERROR)
+						{
+#ifdef WIN32
+							int errorCode = WSAGetLastError();
+							if (errorCode != WSAEWOULDBLOCK)
+							{
+								mLastError = UdpClientError::RECEIVE_BROADCAST_FAILED;
+								return -1;
+							}
+#else
+							if (errno != EWOULDBLOCK)
+							{
+								mLastError = UdpClientError::RECEIVE_BROADCAST_FAILED;
+								return -1;
+							}
+#endif
+							return 0;
+						}
+
+						return receivedBytes;
+					}
+
+					return 0;
+				}
+			}
+
+			return -1;
+		}
+
+		int8_t UDP_Client::ReceiveBroadcastFromListenerPort(void* buffer, const uint32_t maxSize, const int16_t port)
+		{
+
+
+			return -1;
+		}
+
 		int8_t UDP_Client::ReceiveMulticast(void* buffer, const uint32_t maxSize, std::string& multicastGroup)
 		{
 			return -1;
@@ -559,6 +657,14 @@ namespace Essentials
 		{
 			closesocket(mBroadcastSocket);
 			mBroadcastSocket = INVALID_SOCKET;
+
+			for (const auto& socket : mBroadcastListeners)
+			{
+				closesocket(socket);
+			}
+
+			mBroadcastEndpoints.clear();
+			mBroadcastListeners.clear();
 		}
 
 		void UDP_Client::CloseMulticast()

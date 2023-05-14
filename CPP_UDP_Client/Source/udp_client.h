@@ -17,6 +17,7 @@
 //          --------------------        ---------------------------------------
 #ifdef WIN32
 #include <stdint.h>						// Standard integer types
+#include <WinSock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
@@ -53,6 +54,7 @@ namespace Essentials
 		constexpr static uint8_t	UDP_CLIENT_VERSION_MINOR	= 1;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_PATCH	= 0;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_BUILD	= 0;
+		constexpr static uint8_t	UDP_SOCKET_TIMEOUT			= 100;
 
 		static std::string UdpClientVersion = "UDP Client v" +
 			std::to_string((uint8_t)UDP_CLIENT_VERSION_MAJOR) + "." +
@@ -93,6 +95,9 @@ namespace Essentials
 			FAILED_TO_SET_NONBLOCK,
 			FAILED_TO_GET_SOCKET_FLAGS,
 			ENABLE_REUSEADDR_FAILED,
+			FAILED_TO_SET_TIMEOUT,
+			SELECT_READ_ERROR,
+			RECEIVE_BROADCAST_FAILED,
 		};
 
 		/// <summary>Error enum to string map</summary>
@@ -167,7 +172,12 @@ namespace Essentials
 			/// <summary>A function to enable broadcasting</summary>
 			/// <param name="port"> -[in]- Port to broadcast on</param>
 			//// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t EnableBroadcast(const int16_t port);
+			int8_t EnableBroadcastSender(const int16_t port);
+
+			/// <summary>A function to add a port to listen for broadcast messages</summary>
+			/// <param name="port"> -[in]- Port to listen for broadcast on</param>
+			//// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
+			int8_t AddBroadcastListener(const int16_t port);
 
 			/// <summary>Disables broadcast and cleans up</summary>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
@@ -244,6 +254,19 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t ReceiveUnicast(void* buffer, const uint32_t maxSize, std::string& recvFromAddr, int16_t& recvFromPort);
 
+			/// <summary>Receive a broadcast message</summary>
+			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
+			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
+			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t ReceiveBroadcast(void* buffer, const uint32_t maxSize);
+
+			/// <summary>Receive a broadcast message from a specific listener port</summary>
+			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
+			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
+			/// <param name="port"> -[in]- Port of the broadcast to receive from</param>
+			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t ReceiveBroadcastFromListenerPort(void* buffer, const uint32_t maxSize, const int16_t port);
+
 			/// <summary>Receive a multicast message</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
 			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
@@ -298,7 +321,9 @@ namespace Essentials
 			sockaddr_in					mClientAddr;			// This clients sockaddr
 			sockaddr_in					mBroadcastAddr;			// Broadcast sockaddr
 			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
+			timeval						mTimeout;
 			std::vector<sockaddr_in>	mMulticastEndpoints;	// List of multicast endpoints
+			std::vector<sockaddr_in>	mBroadcastEndpoints;	// List of broadcast endpoints listening to
 
 #ifdef WIN32
 			WSADATA						mWsaData;				// Winsock data
@@ -306,6 +331,7 @@ namespace Essentials
 			SOCKET						mSocket;				// socket FD for this client
 			SOCKET						mBroadcastSocket;		// socket FD for broadcasting
 			std::vector<SOCKET>			mMulticastSockets;		// socket FDs for multicasting
+			std::vector<SOCKET>			mBroadcastListeners;	// socket FDs for broadcast listening
 		};
 	}
 }

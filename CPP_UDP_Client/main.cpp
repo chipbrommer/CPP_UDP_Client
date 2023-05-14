@@ -4,10 +4,11 @@
 #include <iostream>
 #include "Source/udp_client.h"
 
-#define UNICAST_SEND_TEST
+//#define UNICAST_SEND_TEST
 //#define BROADCAST_SEND_TEST
 //#define MULTICAST_SEND_TEST
-//#define UNICAST_RECV_TEST
+#define UNICAST_RECV_TEST
+//#define BROADCAST_RECV_TEST
 
 int main()
 {
@@ -16,7 +17,7 @@ int main()
 	std::cout << Essentials::Communications::UdpClientVersion;
 
 #ifdef BROADCAST_SEND_TEST
-	if (udp->EnableBroadcast(8080) < 0)
+	if (udp->EnableBroadcastSender(8080) < 0)
 	{
 		std::cout << udp->GetLastError() << std::endl;
 	}
@@ -72,6 +73,11 @@ int main()
 
 	char buffer[200];
 	int size = sizeof(buffer);
+#elif defined BROADCAST_RECV_TEST
+	udp->AddBroadcastListener(8080);
+
+	char buffer[200];
+	int size = sizeof(buffer);
 #endif // TESTS
 
 	int sendcount = 0;
@@ -79,12 +85,12 @@ int main()
 	for (;;)
 	{
 #ifdef BROADCAST_SEND_TEST
-		if (udp->Send(buffer.c_str(), buffer.length(), Essentials::Communications::SendType::BROADCAST) < 1)
+		if (udp->Send(buffer.c_str(), (uint32_t)buffer.length(), Essentials::Communications::SendType::BROADCAST) < 1)
 		{
 			std::cout << "FAIL: " << udp->GetLastError() << std::endl;
 		}
 
-		if (udp->SendBroadcast(buffer2.c_str(), buffer2.length()) < 1)
+		if (udp->SendBroadcast(buffer2.c_str(), (uint32_t)buffer2.length()) < 1)
 		{
 			std::cout << "FAIL 2: " << udp->GetLastError() << std::endl;
 		}
@@ -130,6 +136,22 @@ int main()
 			std::cout << udp->GetLastError() << std::endl;
 		}
 		else if(bytesReceived > 0)
+		{
+			buffer[bytesReceived] = '\0'; // Null-terminate the received data
+			std::cout << "Received data from: " << udp->GetIpOfLastReceive() << ":" << udp->GetPortOfLastReceive() << ": " << buffer << std::endl;
+		}
+		else
+		{
+			std::cout << "No Data." << std::endl;
+		}
+#elif defined BROADCAST_RECV_TEST
+		int bytesReceived = udp->ReceiveBroadcast(buffer, size);
+
+		if (bytesReceived == -1)
+		{
+			std::cout << udp->GetLastError() << std::endl;
+		}
+		else if (bytesReceived > 0)
 		{
 			buffer[bytesReceived] = '\0'; // Null-terminate the received data
 			std::cout << "Received data from: " << udp->GetIpOfLastReceive() << ":" << udp->GetPortOfLastReceive() << ": " << buffer << std::endl;
