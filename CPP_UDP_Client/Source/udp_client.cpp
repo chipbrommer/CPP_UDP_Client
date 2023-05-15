@@ -196,7 +196,11 @@ namespace Essentials
 
 			// Set the receive timeout to 100ms
 			mTimeout.tv_sec = UDP_SOCKET_TIMEOUT / 1000;
+#if WIN32
 			mTimeout.tv_usec = (UDP_SOCKET_TIMEOUT % 1000) * 1000;
+#else
+			mTimeout.tv_usec = static_cast<__suseconds_t>((UDP_SOCKET_TIMEOUT % 1000)) * 1000;
+#endif
 
 			if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&mTimeout), sizeof(mTimeout)) == SOCKET_ERROR)
 			{
@@ -215,8 +219,7 @@ namespace Essentials
 				return -1;
 			}
 
-			mBroadcastListeners.push_back(sock);
-			mBroadcastEndpoints.push_back(addr);
+			mBroadcastListeners.push_back({sock,addr});
 
 			return 0;
 		}
@@ -229,15 +232,11 @@ namespace Essentials
 				return -1;
 			}
 
-			if (setsockopt(mBroadcastSocket, SOL_SOCKET, SO_BROADCAST, (char*)0, sizeof(char*)) < 0)
-			{
-				mLastError = UdpClientError::DISABLE_BROADCAST_FAILED;
-				return -1;
-			}
-
-			// success
+			// reset the sockaddr and close the broadcast socket. 
 			memset(reinterpret_cast<char*>(&mBroadcastAddr), 0, sizeof(mBroadcastAddr));
-			CloseBroadcast();
+			closesocket(mBroadcastSocket);
+			mBroadcastSocket = INVALID_SOCKET;
+
 			return 0;
 		}
 
@@ -250,7 +249,7 @@ namespace Essentials
 		{
 			if (mMulticastSockets.size() < 1)
 			{
-				mLastError = UdpClientError::BROADCAST_NOT_ENABLED;
+				mLastError = UdpClientError::MULTICAST_NOT_ENABLED;
 				return -1;
 			}
 
@@ -314,12 +313,12 @@ namespace Essentials
 
 			if (setsockopt(tempSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&mreq, sizeof(mreq)) == SOCKET_ERROR)
 			{
+				mLastError = UdpClientError::ADD_MULTICAST_GROUP_FAILED;
 				closesocket(tempSock);
 				return -1;
 			}
 
-			mMulticastEndpoints.push_back(endpoint);
-			mMulticastSockets.push_back(tempSock);
+			mMulticastSockets.push_back({ tempSock, endpoint });
 
 			return true;
 		}
@@ -486,9 +485,13 @@ namespace Essentials
 			if (mMulticastSockets.size() > 0)
 			{
 				int32_t numSent = 0;
-				for (int i = 0; i < mMulticastSockets.size(); i++)
+				for (const auto& i : mBroadcastListeners)
 				{
-					numSent = sendto(mMulticastSockets[i], buffer, size, 0, (struct sockaddr*)&mMulticastEndpoints[i], sizeof(sockaddr_in));
+					// Grab the socket and addr info from the vector for use.
+					SOCKET sock = get<0>(i);
+					sockaddr_in addr = get<1>(i);
+
+					numSent = sendto(sock, buffer, size, 0, (struct sockaddr*)&addr, sizeof(sockaddr_in));
 
 					if (numSent < 0)
 					{
@@ -522,9 +525,9 @@ namespace Essentials
 
 			// Receive datagram over UDP
 #if defined WIN32
-			int32_t sizeRead = static_cast<int>(recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize-1, 0, (struct sockaddr*)&sourceAddress, &addressLength));
+			int32_t sizeRead = recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize-1, 0, (struct sockaddr*)&sourceAddress, &addressLength);
 #else
-			int32_t sizeRead = static_cast<int>(recvfrom(mSocket, buffer, maxSize-1, 0, (struct sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength)));
+			int32_t sizeRead = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength));
 #endif
 
 			// Check for error
@@ -580,11 +583,15 @@ namespace Essentials
 		{
 			if (mBroadcastListeners.size() > 0)
 			{
-				for (int i = 0; i < mBroadcastListeners.size(); i++)
+				for (const auto& i : mBroadcastListeners)
 				{
-					if (mBroadcastListeners[i] != INVALID_SOCKET)
+					// Grab the socket and addr info from the vector for use.
+					SOCKET sock = get<0>(i);
+					sockaddr_in addr = get<1>(i);
+
+					if (sock != INVALID_SOCKET)
 					{
-						SOCKET sock = mBroadcastListeners[i];
+						// Verify incoming data is available.
 						fd_set readSet{};
 						FD_ZERO(&readSet);
 						FD_SET(sock, &readSet);
@@ -593,16 +600,21 @@ namespace Essentials
 						
 						int selectResult = select((int)sock + 1, &readSet, nullptr, nullptr, &mTimeout);
 						
+						// Catch error
 						if (selectResult == SOCKET_ERROR)
 						{
 							mLastError = UdpClientError::SELECT_READ_ERROR;
 							return 1;
 						}
 
+						// If data is available on this socket, attempt to read it 
 						if (selectResult > 0)
 						{
-							int receivedBytes = recvfrom(sock, (char*)buffer, maxSize, 0,
-								reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
+#if defined WIN32
+							int32_t receivedBytes = recvfrom(sock, (char*)buffer, maxSize-1, 0, reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
+#else
+							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
+#endif
 
 							if (receivedBytes == SOCKET_ERROR)
 							{
@@ -623,12 +635,15 @@ namespace Essentials
 								return 0;
 							}
 
-							mLastRecvBroadcastPort = ntohs(mBroadcastEndpoints[i].sin_port);
+							mLastRecvBroadcastPort = ntohs(addr.sin_port);
 							return receivedBytes;
 						}
+
+						// If here, selectResult == 0, so we check next socket. 
 					}
 				}
 
+				// If here, for loop completed, and all have no data. 
 				return 0;
 			}
 			return -1;
@@ -671,23 +686,21 @@ namespace Essentials
 			closesocket(mBroadcastSocket);
 			mBroadcastSocket = INVALID_SOCKET;
 
-			for (auto socket : mBroadcastListeners)
+			for (const auto& i : mBroadcastListeners)
 			{
-				closesocket(socket);
+				closesocket(get<0>(i));
 			}
 			
 			mBroadcastListeners.clear();
-			mBroadcastEndpoints.clear();
 		}
 
 		void UDP_Client::CloseMulticast()
 		{
-			for (const auto& socket : mMulticastSockets)
+			for (const auto& i : mMulticastSockets)
 			{
-				closesocket(socket);
+				closesocket(get<0>(i));
 			}
 
-			mMulticastEndpoints.clear();
 			mMulticastSockets.clear();
 		}
 

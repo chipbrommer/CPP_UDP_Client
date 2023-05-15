@@ -98,6 +98,8 @@ namespace Essentials
 			FAILED_TO_SET_TIMEOUT,
 			SELECT_READ_ERROR,
 			RECEIVE_BROADCAST_FAILED,
+			MULTICAST_NOT_ENABLED,
+			ADD_MULTICAST_GROUP_FAILED,
 		};
 
 		/// <summary>Error enum to string map</summary>
@@ -329,8 +331,6 @@ namespace Essentials
 			sockaddr_in					mBroadcastAddr;			// Broadcast sockaddr
 			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
 			timeval						mTimeout;
-			std::vector<sockaddr_in>	mMulticastEndpoints;	// List of multicast endpoints
-			std::vector<sockaddr_in>	mBroadcastEndpoints;	// List of multicast endpoints
 			int16_t						mLastRecvBroadcastPort;	// Holds port of last received broadcast port
 
 #ifdef WIN32
@@ -338,8 +338,8 @@ namespace Essentials
 #endif
 			SOCKET						mSocket;				// socket FD for this client
 			SOCKET						mBroadcastSocket;		// socket FD for broadcasting
-			std::vector<SOCKET>			mBroadcastListeners;	// socket FD for broadcast listening
-			std::vector<SOCKET>			mMulticastSockets;		// socket FDs for multicasting
+			std::vector<std::tuple<SOCKET, sockaddr_in>>   mBroadcastListeners;		// Vector of tuples containing the socket and addr info for listening to broadcasts
+			std::vector<std::tuple<SOCKET, sockaddr_in>>   mMulticastSockets;		// Vector of tuples containing the socket and addr info for multicasts
 		};
 	}
 }
