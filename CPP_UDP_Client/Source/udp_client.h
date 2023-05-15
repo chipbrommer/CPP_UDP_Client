@@ -260,6 +260,13 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t ReceiveBroadcast(void* buffer, const uint32_t maxSize);
 
+			/// <summary>Receive a broadcast message</summary>
+			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
+			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
+			/// <param name="port"> -[out]- Port the broadcast was received from</param>
+			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t ReceiveBroadcast(void* buffer, const uint32_t maxSize, int16_t& port);
+
 			/// <summary>Receive a broadcast message from a specific listener port</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
 			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
@@ -323,13 +330,15 @@ namespace Essentials
 			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
 			timeval						mTimeout;
 			std::vector<sockaddr_in>	mMulticastEndpoints;	// List of multicast endpoints
+			std::vector<sockaddr_in>	mBroadcastEndpoints;	// List of multicast endpoints
+			int16_t						mLastRecvBroadcastPort;	// Holds port of last received broadcast port
 
 #ifdef WIN32
 			WSADATA						mWsaData;				// Winsock data
 #endif
 			SOCKET						mSocket;				// socket FD for this client
 			SOCKET						mBroadcastSocket;		// socket FD for broadcasting
-			SOCKET						mBroadcastListener;		// socket FD for broadcast listening
+			std::vector<SOCKET>			mBroadcastListeners;	// socket FD for broadcast listening
 			std::vector<SOCKET>			mMulticastSockets;		// socket FDs for multicasting
 		};
 	}

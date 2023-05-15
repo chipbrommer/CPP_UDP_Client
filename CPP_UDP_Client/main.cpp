@@ -75,6 +75,7 @@ int main()
 	int size = sizeof(buffer);
 #elif defined BROADCAST_RECV_TEST
 	udp->AddBroadcastListener(8000);
+	udp->AddBroadcastListener(8002);
 
 	char buffer[200];
 	int size = sizeof(buffer);
@@ -145,7 +146,8 @@ int main()
 			std::cout << "No Data." << std::endl;
 		}
 #elif defined BROADCAST_RECV_TEST
-		int bytesReceived = udp->ReceiveBroadcast(buffer, size);
+		int16_t p = 0;
+		int bytesReceived = udp->ReceiveBroadcast(buffer, size, p);
 
 		if (bytesReceived == -1)
 		{
@@ -154,7 +156,7 @@ int main()
 		else if (bytesReceived > 0)
 		{
 			buffer[bytesReceived] = '\0'; // Null-terminate the received data
-			std::cout << "Received data from: " << udp->GetIpOfLastReceive() << ":" << udp->GetPortOfLastReceive() << ": " << buffer << std::endl;
+			std::cout << "Received data from " << p << ": " << buffer << std::endl;
 		}
 		else
 		{
