@@ -7,8 +7,8 @@
 //#define UNICAST_SEND_TEST
 //#define BROADCAST_SEND_TEST
 //#define MULTICAST_SEND_TEST
-#define UNICAST_RECV_TEST
-//#define BROADCAST_RECV_TEST
+//#define UNICAST_RECV_TEST
+#define BROADCAST_RECV_TEST
 
 int main()
 {
@@ -74,7 +74,7 @@ int main()
 	char buffer[200];
 	int size = sizeof(buffer);
 #elif defined BROADCAST_RECV_TEST
-	udp->AddBroadcastListener(8080);
+	udp->AddBroadcastListener(8000);
 
 	char buffer[200];
 	int size = sizeof(buffer);

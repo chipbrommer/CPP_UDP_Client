@@ -323,15 +323,14 @@ namespace Essentials
 			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
 			timeval						mTimeout;
 			std::vector<sockaddr_in>	mMulticastEndpoints;	// List of multicast endpoints
-			std::vector<sockaddr_in>	mBroadcastEndpoints;	// List of broadcast endpoints listening to
 
 #ifdef WIN32
 			WSADATA						mWsaData;				// Winsock data
 #endif
 			SOCKET						mSocket;				// socket FD for this client
 			SOCKET						mBroadcastSocket;		// socket FD for broadcasting
+			SOCKET						mBroadcastListener;		// socket FD for broadcast listening
 			std::vector<SOCKET>			mMulticastSockets;		// socket FDs for multicasting
-			std::vector<SOCKET>			mBroadcastListeners;	// socket FDs for broadcast listening
 		};
 	}
 }
