@@ -1,13 +1,13 @@
 ﻿#include <iostream>
 #include "Source/udp_client.h"
 
-//#define UNICAST_SEND_TEST
+#define UNICAST_SEND_TEST
 //#define BROADCAST_SEND_TEST
 //#define MULTICAST_SEND_TEST
 //#define UNICAST_RECV_TEST
 //#define BROADCAST_RECV_TEST
 //#define BROADCAST_RECV_SPECIFIC_TEST
-#define MULTICAST_RECV_TEST
+//#define MULTICAST_RECV_TEST
 //#define MULTICAST_RECV_SPECIFIC_TEST
 
 int main()

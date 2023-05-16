@@ -296,7 +296,6 @@ namespace Essentials
 			int8_t reuseAddr = 1;
 			if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
 			{
-				std::string t = strerror(errno);
 				closesocket(sock);
 				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
 				return -1;
