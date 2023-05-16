@@ -59,6 +59,13 @@ int main()
 	if (udp->EnableMulticast("239.255.0.8", 8099) < 0)
 	{
 		std::cout << udp->GetLastError() << std::endl;
+		return -1;
+	}
+
+	if (udp->EnableMulticast("239.255.0.7", 8098) < 0)
+	{
+		std::cout << udp->GetLastError() << std::endl;
+		return -1;
 	}
 
 	char inbuffer[200];
@@ -171,7 +178,7 @@ int main()
 			std::cout << "No Data." << std::endl;
 		}
 #elif defined BROADCAST_RECV_SPECIFIC_TEST
-		int16_t p = 8002;
+		int16_t p = 8000;
 		int bytesReceived = udp->ReceiveBroadcastFromListenerPort(buffer, size, p);
 
 		if (bytesReceived == -1)

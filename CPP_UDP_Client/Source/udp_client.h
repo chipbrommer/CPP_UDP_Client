@@ -54,7 +54,7 @@ namespace Essentials
 		constexpr static uint8_t	UDP_CLIENT_VERSION_MINOR	= 1;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_PATCH	= 0;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_BUILD	= 0;
-		constexpr static uint8_t	UDP_SOCKET_TIMEOUT			= 100;
+		constexpr static uint8_t	UDP_DEFAULT_SOCKET_TIMEOUT	= 1;
 
 		static std::string UdpClientVersion = "UDP Client v" +
 			std::to_string((uint8_t)UDP_CLIENT_VERSION_MAJOR) + "." +
@@ -235,15 +235,9 @@ namespace Essentials
 			/// <summary>Send a multicast message to all joined groups</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
 			/// <param name="size"> -[in]- Size to be sent</param>
+			/// <param name="groupIP"> -[in/opt]- IP of group to send to if only sending to one desired group</param>
 			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t SendMulticast(const char* buffer, const uint32_t size);
-
-			/// <summary>Send a multicast message to a particular group already joined</summary>
-			/// <param name="buffer"> -[in]- Buffer to be sent</param>
-			/// <param name="size"> -[in]- Size to be sent</param>
-			/// <param name="groupIP"> -[in]- IP of group to send to</param>
-			/// <returns>0+ if successful (number bytes sent), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t SendMulticast(const char* buffer, const uint32_t size, const std::string& groupIP);
+			int8_t SendMulticast(const char* buffer, const uint32_t size, const std::string& groupIP = "");
 
 			/// <summary>Receive data from a server</summary>
 			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
@@ -286,13 +280,6 @@ namespace Essentials
 			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
 			int8_t ReceiveMulticast(void* buffer, const uint32_t maxSize, std::string& multicastGroup);
 
-			/// <summary>Receive a multicast message from a specific group</summary>
-			/// <param name="buffer"> -[out]- Buffer to place received data into</param>
-			/// <param name="maxSize"> -[in]- Maximum number of bytes to be read</param>
-			/// <param name="multicastGroup"> -[in]- IP of the group received from</param>
-			/// <returns>0+ if successful (number bytes received), -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t ReceiveFromSpecificMulticastGroup(void* buffer, const uint32_t maxSize, std::string multicastGroup);
-
 			/// <summary>Closes the unicast client and cleans up</summary>
 			void CloseUnicast();
 
@@ -308,9 +295,9 @@ namespace Essentials
 			int8_t SetTimeToLive(const int8_t ttl);
 
 			/// <summary>Sets the timeout value for message reads.</summary>
-			/// <param name="ttl"> -[in]- Number of seconds for a read timeout.</param>
+			/// <param name="timeoutMSecs"> -[in]- Number of milliseconds for a read timeout.</param>
 			/// <returns>0 if successful set, -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
-			int8_t SetTimeout(const int8_t timeout);
+			int8_t SetTimeout(const int32_t timeoutMSecs);
 
 			/// <summary>Get the ip address of the last received message.</summary>
 			/// <returns>If valid, A string containing the IP address; else an empty string. Call UDP_Client::GetLastError to find out more.</returns>
@@ -352,8 +339,8 @@ namespace Essentials
 #endif
 			SOCKET						mSocket;				// socket FD for this client
 			SOCKET						mBroadcastSocket;		// socket FD for broadcasting
-			std::vector<std::tuple<SOCKET, sockaddr_in>>   mBroadcastListeners;		// Vector of tuples containing the socket and addr info for listening to broadcasts
-			std::vector<std::tuple<SOCKET, sockaddr_in>>   mMulticastSockets;		// Vector of tuples containing the socket and addr info for multicasts
+			std::vector<std::tuple<SOCKET, sockaddr_in, Endpoint>>   mBroadcastListeners;	// Vector of tuples containing the socket and addr info for listening to broadcasts
+			std::vector<std::tuple<SOCKET, sockaddr_in, Endpoint>>   mMulticastSockets;		// Vector of tuples containing the socket and addr info for multicasts
 		};
 	}
 }

@@ -31,6 +31,13 @@ namespace Essentials
 			mClientAddr			= {};
 			mBroadcastAddr		= {};
 			mLastReceiveInfo	= new Endpoint();
+			mTimeout.tv_sec = UDP_DEFAULT_SOCKET_TIMEOUT;
+#if WIN32
+			mTimeout.tv_usec = UDP_DEFAULT_SOCKET_TIMEOUT * 1000;
+#else
+			mTimeout.tv_usec = static_cast<__suseconds_t>(UDP_DEFAULT_SOCKET_TIMEOUT) * 1000;
+#endif
+			mTimeToLive			= 2;
 
 #ifdef WIN32
 			if (WSAStartup(MAKEWORD(2, 2), &mWsaData) != 0) 
@@ -67,6 +74,13 @@ namespace Essentials
 			mLastError			= UdpClientError::NONE;
 			mDestinationAddr	= {};
 			mBroadcastAddr		= {};
+			mTimeout.tv_sec = UDP_DEFAULT_SOCKET_TIMEOUT;
+#if WIN32
+			mTimeout.tv_usec = UDP_DEFAULT_SOCKET_TIMEOUT * 1000;
+#else
+			mTimeout.tv_usec = static_cast<__suseconds_t>(UDP_DEFAULT_SOCKET_TIMEOUT) * 1000;
+#endif
+			mTimeToLive			= 2;
 
 #ifdef WIN32
 			if (WSAStartup(MAKEWORD(2, 2), &mWsaData) != 0)
@@ -194,14 +208,7 @@ namespace Essentials
 				return -1;
 			}
 
-			// Set the receive timeout to 100ms
-			mTimeout.tv_sec = UDP_SOCKET_TIMEOUT / 1000;
-#if WIN32
-			mTimeout.tv_usec = (UDP_SOCKET_TIMEOUT % 1000) * 1000;
-#else
-			mTimeout.tv_usec = static_cast<__suseconds_t>((UDP_SOCKET_TIMEOUT % 1000)) * 1000;
-#endif
-
+			// Set the receive timeout
 			if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&mTimeout), sizeof(mTimeout)) == SOCKET_ERROR)
 			{
 				mLastError = UdpClientError::FAILED_TO_SET_TIMEOUT;
@@ -219,7 +226,9 @@ namespace Essentials
 				return -1;
 			}
 
-			mBroadcastListeners.push_back({sock,addr});
+			Endpoint ep{ "", port };
+
+			mBroadcastListeners.push_back({sock,addr,ep});
 
 			return 0;
 		}
@@ -272,6 +281,8 @@ namespace Essentials
 				return -1;
 			}
 
+			Endpoint ep = { groupIP, groupPort };
+
 			// Create a UDP socket
 			SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -282,9 +293,10 @@ namespace Essentials
 			}
 
 			// Enable SO_REUSEADDR to allow multiple sockets to bind to the same address
-			bool reuseAddr = true;
-			if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
+			int8_t reuseAddr = 1;
+			if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
 			{
+				std::string t = strerror(errno);
 				closesocket(sock);
 				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
 				return -1;
@@ -314,8 +326,7 @@ namespace Essentials
 			}
 
 			// Set the TTL (time to live) for any outpoing multicast packets to 5 hops
-			int ttl = 5;
-			if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&ttl, sizeof(ttl)) == SOCKET_ERROR)
+			if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&mTimeToLive, sizeof(mTimeToLive)) == SOCKET_ERROR)
 			{
 				mLastError = UdpClientError::MULTICAST_SET_TTL_FAILED;
 				return -1;
@@ -369,7 +380,7 @@ namespace Essentials
 			}
 #endif
 
-			mMulticastSockets.push_back({ sock, multicastAddr });
+			mMulticastSockets.push_back({ sock, multicastAddr, ep });
 
 			return 0;
 		}
@@ -530,7 +541,7 @@ namespace Essentials
 			return -1;
 		}
 
-		int8_t UDP_Client::SendMulticast(const char* buffer, const uint32_t size)
+		int8_t UDP_Client::SendMulticast(const char* buffer, const uint32_t size, const std::string& groupIP)
 		{
 			// verify socket and then send datagram
 			if (mMulticastSockets.size() > 0)
@@ -541,6 +552,13 @@ namespace Essentials
 					// Grab the socket and addr info from the vector for use.
 					SOCKET sock = get<0>(i);
 					sockaddr_in addr = get<1>(i);
+					Endpoint ep = get<2>(i);
+
+					// If groupIP is not empty, check the IP we are currently sending to and only send to the desired group.
+					if (!groupIP.empty() && groupIP != ep.ipAddress)
+					{
+						continue;
+					}
 
 					numSent = sendto(sock, buffer, size, 0, (struct sockaddr*)&addr, sizeof(sockaddr_in));
 
@@ -552,17 +570,6 @@ namespace Essentials
 				}
 
 				return numSent;
-			}
-
-			return -1;
-		}
-
-		int8_t UDP_Client::SendMulticast(const char* buffer, const uint32_t size, const std::string& groupIP)
-		{
-			// verify socket and then send datagram
-			if (mMulticastSockets.size() > 0)
-			{
-				// TODO
 			}
 
 			return -1;
@@ -720,11 +727,10 @@ namespace Essentials
 					// Grab the socket and addr info from the vector for use.
 					SOCKET sock = get<0>(i);
 					sockaddr_in addr = get<1>(i);
-
-					int16_t addrPort = ntohs(addr.sin_port);
+					Endpoint ep = get<2>(i);
 
 					// If the ports arent equal, continue to next iteration.
-					if (port != addrPort)
+					if (port != ep.port)
 					{
 						continue;
 					}
@@ -864,13 +870,6 @@ namespace Essentials
 			return -1;
 		}
 
-		int8_t UDP_Client::ReceiveFromSpecificMulticastGroup(void* buffer, const uint32_t maxSize, std::string multicastGroup)
-		{
-			// TODO 
-
-			return -1;
-		}
-
 		void UDP_Client::CloseUnicast()
 		{
 			closesocket(mSocket);
@@ -902,14 +901,39 @@ namespace Essentials
 
 		int8_t UDP_Client::SetTimeToLive(const int8_t ttl)
 		{
-			// TODO 
+			if (ttl > 0 && ttl < 255)
+			{
+				mTimeToLive = ttl;
+
+				if (mMulticastSockets.size() > 0)
+				{
+					for (const auto& i : mMulticastSockets)
+					{
+						SOCKET sock = get<0>(i);
+
+						if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&mTimeToLive, sizeof(mTimeToLive)) == SOCKET_ERROR)
+						{
+							mLastError = UdpClientError::MULTICAST_SET_TTL_FAILED;
+							return -1;
+						}
+					}
+				}
+
+				return 0;
+			}
+
 			return -1;
 		}
 
-		int8_t UDP_Client::SetTimeout(const int8_t timeout)
+		int8_t UDP_Client::SetTimeout(const int32_t timeoutMSecs)
 		{
-			// TODO 
-			return -1;
+			mTimeout.tv_sec = timeoutMSecs / 1000;
+#if WIN32
+			mTimeout.tv_usec = timeoutMSecs * 1000;
+#else
+			mTimeout.tv_usec = static_cast<__suseconds_t>(timeoutMSecs) * 1000;
+#endif
+			return 0;
 		}
 
 		std::string UDP_Client::GetIpOfLastReceive()
