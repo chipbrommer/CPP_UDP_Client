@@ -302,6 +302,16 @@ namespace Essentials
 			/// <summary>Closes the broadcast client and cleans up</summary>
 			void CloseMulticast();
 
+			/// <summary>Sets the number of hops outbound multicast messages live for.</summary>
+			/// <param name="ttl"> -[in]- Number of hops multicast messages live for 0-255</param>
+			/// <returns>0 if successful set, -1 if fails. Call UDP_Client::GetLastError to find out more..</returns>
+			int8_t SetTimeToLive(const int8_t ttl);
+
+			/// <summary>Sets the timeout value for message reads.</summary>
+			/// <param name="ttl"> -[in]- Number of seconds for a read timeout.</param>
+			/// <returns>0 if successful set, -1 if fails. Call UDP_Client::GetLastError to find out more.</returns>
+			int8_t SetTimeout(const int8_t timeout);
+
 			/// <summary>Get the ip address of the last received message.</summary>
 			/// <returns>If valid, A string containing the IP address; else an empty string. Call UDP_Client::GetLastError to find out more.</returns>
 			std::string GetIpOfLastReceive();
@@ -333,7 +343,8 @@ namespace Essentials
 			sockaddr_in					mClientAddr;			// This clients sockaddr
 			sockaddr_in					mBroadcastAddr;			// Broadcast sockaddr
 			Endpoint*					mLastReceiveInfo;		// Last receive endpoint info
-			timeval						mTimeout;
+			timeval						mTimeout;				// Holds the message receive timeout value in seconds. 
+			int8_t						mTimeToLive;			// Holds the ttl (Time To Live) for multicast messages. IE: How many interface hops they live for: 0-255
 			int16_t						mLastRecvBroadcastPort;	// Holds port of last received broadcast port
 
 #ifdef WIN32

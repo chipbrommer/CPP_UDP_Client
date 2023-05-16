@@ -562,7 +562,7 @@ namespace Essentials
 			// verify socket and then send datagram
 			if (mMulticastSockets.size() > 0)
 			{
-
+				// TODO
 			}
 
 			return -1;
@@ -866,6 +866,8 @@ namespace Essentials
 
 		int8_t UDP_Client::ReceiveFromSpecificMulticastGroup(void* buffer, const uint32_t maxSize, std::string multicastGroup)
 		{
+			// TODO 
+
 			return -1;
 		}
 
@@ -896,6 +898,18 @@ namespace Essentials
 			}
 
 			mMulticastSockets.clear();
+		}
+
+		int8_t UDP_Client::SetTimeToLive(const int8_t ttl)
+		{
+			// TODO 
+			return -1;
+		}
+
+		int8_t UDP_Client::SetTimeout(const int8_t timeout)
+		{
+			// TODO 
+			return -1;
 		}
 
 		std::string UDP_Client::GetIpOfLastReceive()
