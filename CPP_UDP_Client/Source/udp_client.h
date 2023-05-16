@@ -100,6 +100,9 @@ namespace Essentials
 			RECEIVE_BROADCAST_FAILED,
 			MULTICAST_NOT_ENABLED,
 			ADD_MULTICAST_GROUP_FAILED,
+			MULTICAST_INTERFACE_ERROR,
+			MULTICAST_BIND_FAILED,
+			MULTICAST_SET_TTL_FAILED,
 		};
 
 		/// <summary>Error enum to string map</summary>

@@ -273,54 +273,105 @@ namespace Essentials
 			}
 
 			// Create a UDP socket
-			SOCKET tempSock = socket(AF_INET, SOCK_DGRAM, 0);
+			SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
-			if (tempSock == INVALID_SOCKET)
+			if (sock == INVALID_SOCKET)
 			{
 				mLastError = UdpClientError::BAD_MULTICAST_ADDRESS;
 				return 1;
 			}
 
-			// Set up the multicast group address and port
-			sockaddr_in endpoint{};
-			endpoint.sin_family = AF_INET;
-			endpoint.sin_port = htons(groupPort);  // Multicast group port
-
-			if (inet_pton(AF_INET, groupIP.c_str(), &(endpoint.sin_addr)) <= 0)
+			// Enable SO_REUSEADDR to allow multiple sockets to bind to the same address
+			bool reuseAddr = true;
+			if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
 			{
-				mLastError = UdpClientError::ENABLE_MULTICAST_FAILED;
+				closesocket(sock);
+				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
 				return -1;
 			}
 
-			// Join the multicast group
-			// mreq.imr_interface.s_addr = Interface to join on (use INADDR_ANY to join on all interfaces)
-			ip_mreq mreq{};
-			mreq.imr_interface.s_addr = INADDR_ANY;
-
-			if (inet_pton(AF_INET, groupIP.c_str(), &(mreq.imr_multiaddr.s_addr)) <= 0)
+			// Set up the multicast group to send and receive data from
+			sockaddr_in multicastAddr{};
+			multicastAddr.sin_family = AF_INET;
+			multicastAddr.sin_port = htons(groupPort);
+			if (inet_pton(AF_INET, groupIP.c_str(), &(multicastAddr.sin_addr)) <= 0)
 			{
 				mLastError = UdpClientError::BAD_MULTICAST_ADDRESS;
 				return -1;
 			}
 
-			// Set reuseable address. 
-			int8_t opt = 1;
-			if (setsockopt(tempSock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0)
+			// Bind the socket to a local IP address
+			sockaddr_in localAddr{};
+			localAddr.sin_family = AF_INET;
+			localAddr.sin_port = htons(groupPort);
+			localAddr.sin_addr.s_addr = INADDR_ANY;
+
+			// Bind the socket to the multicast address
+			if (bind(sock, (struct sockaddr*)&localAddr, sizeof(localAddr)) < 0)
 			{
-				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
+				mLastError = UdpClientError::MULTICAST_BIND_FAILED;
+				return 1;
+			}
+
+			// Set the TTL (time to live) for any outpoing multicast packets to 5 hops
+			int ttl = 5;
+			if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&ttl, sizeof(ttl)) == SOCKET_ERROR)
+			{
+				mLastError = UdpClientError::MULTICAST_SET_TTL_FAILED;
 				return -1;
 			}
 
-			if (setsockopt(tempSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&mreq, sizeof(mreq)) == SOCKET_ERROR)
+			// Set the outgoing interface for multicast packets
+			in_addr interfaceAddr {};
+			interfaceAddr.s_addr = INADDR_ANY;
+			if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (char*)&interfaceAddr, sizeof(interfaceAddr)) < 0) 
+			{
+				mLastError = UdpClientError::MULTICAST_INTERFACE_ERROR;
+				return -1;
+			}
+
+			// Join the multicast group
+			ip_mreq multicastRequest{};
+			if (inet_pton(AF_INET, groupIP.c_str(), &(multicastRequest.imr_multiaddr)) <= 0)
+			{
+				mLastError = UdpClientError::BAD_MULTICAST_ADDRESS;
+				return -1;
+			}
+
+			multicastRequest.imr_interface.s_addr = INADDR_ANY;
+			if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&multicastRequest, sizeof(multicastRequest)) == SOCKET_ERROR)
 			{
 				mLastError = UdpClientError::ADD_MULTICAST_GROUP_FAILED;
-				closesocket(tempSock);
+				closesocket(sock);
 				return -1;
 			}
 
-			mMulticastSockets.push_back({ tempSock, endpoint });
+			// Set the socket to non-blocking mode
+#ifdef WIN32
+			u_long mode = 1;
+			if (ioctlsocket(sock, FIONBIO, &mode) != 0) 
+			{
+				closesocket(sock);
+				return -1;
+			}
+#else
+			int flags = fcntl(sock, F_GETFL, 0);
+			if (flags == -1)
+			{
+				mLastError = UdpClientError::FAILED_TO_GET_SOCKET_FLAGS;
+				return -1;
+			}
 
-			return true;
+			if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)
+			{
+				mLastError = UdpClientError::FAILED_TO_SET_NONBLOCK;
+				return -1;
+			}
+#endif
+
+			mMulticastSockets.push_back({ sock, multicastAddr });
+
+			return 0;
 		}
 
 		int8_t UDP_Client::Open()
@@ -485,7 +536,7 @@ namespace Essentials
 			if (mMulticastSockets.size() > 0)
 			{
 				int32_t numSent = 0;
-				for (const auto& i : mBroadcastListeners)
+				for (const auto& i : mMulticastSockets)
 				{
 					// Grab the socket and addr info from the vector for use.
 					SOCKET sock = get<0>(i);
@@ -662,11 +713,154 @@ namespace Essentials
 
 		int8_t UDP_Client::ReceiveBroadcastFromListenerPort(void* buffer, const uint32_t maxSize, const int16_t port)
 		{
+			if (mBroadcastListeners.size() > 0)
+			{
+				for (const auto& i : mBroadcastListeners)
+				{
+					// Grab the socket and addr info from the vector for use.
+					SOCKET sock = get<0>(i);
+					sockaddr_in addr = get<1>(i);
+
+					int16_t addrPort = ntohs(addr.sin_port);
+
+					// If the ports arent equal, continue to next iteration.
+					if (port != addrPort)
+					{
+						continue;
+					}
+
+					if (sock != INVALID_SOCKET)
+					{
+						// Verify incoming data is available.
+						fd_set readSet{};
+						FD_ZERO(&readSet);
+						FD_SET(sock, &readSet);
+						sockaddr_in recvFrom{};
+						int recvFromSize = sizeof(recvFrom);
+
+						int selectResult = select((int)sock + 1, &readSet, nullptr, nullptr, &mTimeout);
+
+						// Catch error
+						if (selectResult == SOCKET_ERROR)
+						{
+							mLastError = UdpClientError::SELECT_READ_ERROR;
+							return 1;
+						}
+
+						// If data is available on this socket, attempt to read it 
+						if (selectResult > 0)
+						{
+#if defined WIN32
+							int32_t receivedBytes = recvfrom(sock, (char*)buffer, maxSize - 1, 0, reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
+#else
+							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
+#endif
+
+							if (receivedBytes == SOCKET_ERROR)
+							{
+#ifdef WIN32
+								int errorCode = WSAGetLastError();
+								if (errorCode != WSAEWOULDBLOCK)
+								{
+									mLastError = UdpClientError::RECEIVE_BROADCAST_FAILED;
+									return -1;
+								}
+#else
+								if (errno != EWOULDBLOCK)
+								{
+									mLastError = UdpClientError::RECEIVE_BROADCAST_FAILED;
+									return -1;
+								}
+#endif
+								return 0;
+							}
+
+							mLastRecvBroadcastPort = ntohs(addr.sin_port);
+							return receivedBytes;
+						}
+
+						// If here, selectResult == 0, so we check next socket. 
+					}
+				}
+
+				// If here, for loop completed, and all have no data. 
+				return 0;
+			}
 			return -1;
 		}
 
 		int8_t UDP_Client::ReceiveMulticast(void* buffer, const uint32_t maxSize, std::string& multicastGroup)
 		{
+			if (mMulticastSockets.size() > 0)
+			{
+				for (const auto& i : mMulticastSockets)
+				{
+					// Grab the socket and addr info from the vector for use.
+					SOCKET sock = get<0>(i);
+					sockaddr_in addr = get<1>(i);
+
+					if (sock != INVALID_SOCKET)
+					{
+						// Verify incoming data is available.
+						fd_set readSet{};
+						FD_ZERO(&readSet);
+						FD_SET(sock, &readSet);
+						sockaddr_in recvFrom{};
+						int recvFromSize = sizeof(recvFrom);
+
+						int selectResult = select(0, &readSet, nullptr, nullptr, &mTimeout);
+
+						// Catch error
+						if (selectResult == SOCKET_ERROR)
+						{
+							mLastError = UdpClientError::SELECT_READ_ERROR;
+							return 1;
+						}
+
+						// If data is available on this socket, attempt to read it 
+						if (selectResult > 0)
+						{
+#if defined WIN32
+							int32_t receivedBytes = recvfrom(sock, (char*)buffer, maxSize - 1, 0, reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
+#else
+							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
+#endif
+
+							if (receivedBytes == SOCKET_ERROR)
+							{
+#ifdef WIN32
+								int errorCode = WSAGetLastError();
+								if (errorCode != WSAEWOULDBLOCK)
+								{
+									mLastError = UdpClientError::RECEIVE_BROADCAST_FAILED;
+									return -1;
+								}
+#else
+								if (errno != EWOULDBLOCK)
+								{
+									mLastError = UdpClientError::RECEIVE_BROADCAST_FAILED;
+									return -1;
+								}
+#endif
+								return 0;
+							}
+
+							char address[INET_ADDRSTRLEN];
+							if (inet_ntop(AF_INET, &(addr.sin_addr), address, INET_ADDRSTRLEN) != NULL)
+							{
+								multicastGroup = address;
+							}
+
+							return receivedBytes;
+						}
+
+						// If here, selectResult == 0, so we check next socket. 
+					}
+				}
+
+				// If here, for loop completed, and all have no data. 
+				return 0;
+			}
 			return -1;
 		}
 

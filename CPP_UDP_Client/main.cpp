@@ -5,7 +5,10 @@
 //#define BROADCAST_SEND_TEST
 //#define MULTICAST_SEND_TEST
 //#define UNICAST_RECV_TEST
-#define BROADCAST_RECV_TEST
+//#define BROADCAST_RECV_TEST
+//#define BROADCAST_RECV_SPECIFIC_TEST
+#define MULTICAST_RECV_TEST
+//#define MULTICAST_RECV_SPECIFIC_TEST
 
 int main()
 {
@@ -52,6 +55,14 @@ int main()
 
 	std::string buffer = "Hello Group!";
 	std::string buffer2 = "Hello From Multicasting!";
+#elif defined MULTICAST_RECV_TEST
+	if (udp->EnableMulticast("239.255.0.8", 8099) < 0)
+	{
+		std::cout << udp->GetLastError() << std::endl;
+	}
+
+	char inbuffer[200];
+	int size = sizeof(inbuffer);
 #elif defined UNICAST_RECV_TEST
 	if (udp->ConfigureThisClient("127.0.0.1", 8000) < 0)
 	{
@@ -70,7 +81,7 @@ int main()
 
 	char buffer[200];
 	int size = sizeof(buffer);
-#elif defined BROADCAST_RECV_TEST
+#elif defined BROADCAST_RECV_TEST || defined BROADCAST_RECV_SPECIFIC_TEST
 	udp->AddBroadcastListener(8000);
 	udp->AddBroadcastListener(8002);
 
@@ -159,6 +170,52 @@ int main()
 		{
 			std::cout << "No Data." << std::endl;
 		}
+#elif defined BROADCAST_RECV_SPECIFIC_TEST
+		int16_t p = 8002;
+		int bytesReceived = udp->ReceiveBroadcastFromListenerPort(buffer, size, p);
+
+		if (bytesReceived == -1)
+		{
+			std::cout << udp->GetLastError() << std::endl;
+		}
+		else if (bytesReceived > 0)
+		{
+			buffer[bytesReceived] = '\0'; // Null-terminate the received data
+			std::cout << "Received data from " << p << ": " << buffer << std::endl;
+		}
+		else
+		{
+			std::cout << "No Data." << std::endl;
+		}
+#elif defined MULTICAST_RECV_TEST
+		std::string recvFrom{};
+		int bytesReceived = udp->ReceiveMulticast(inbuffer, size, recvFrom);
+		std::string buffer2 = "Recieved!";
+
+		if (bytesReceived == -1)
+		{
+			std::cout << udp->GetLastError() << std::endl;
+		}
+		else if (bytesReceived > 0)
+		{
+			inbuffer[bytesReceived] = '\0'; // Null-terminate the received data
+			std::cout << "Received data from " << recvFrom << ": " << inbuffer << std::endl;
+
+			if (inbuffer != buffer2)
+			{
+				udp->SendMulticast(buffer2.c_str(), (uint32_t)buffer2.length());
+			}
+		}
+		else
+		{
+			std::cout << "No Data." << std::endl;
+		}
+#ifdef WIN32
+		Sleep(1500);
+#else
+		sleep(1);
+#endif
+
 #endif // TESTS
 	}
 
