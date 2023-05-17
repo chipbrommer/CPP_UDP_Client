@@ -50,8 +50,8 @@ namespace Essentials
 {
 	namespace Communications
 	{
-		constexpr static uint8_t	UDP_CLIENT_VERSION_MAJOR	= 0;
-		constexpr static uint8_t	UDP_CLIENT_VERSION_MINOR	= 1;
+		constexpr static uint8_t	UDP_CLIENT_VERSION_MAJOR	= 1;
+		constexpr static uint8_t	UDP_CLIENT_VERSION_MINOR	= 0;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_PATCH	= 0;
 		constexpr static uint8_t	UDP_CLIENT_VERSION_BUILD	= 0;
 		constexpr static uint8_t	UDP_DEFAULT_SOCKET_TIMEOUT	= 1;
