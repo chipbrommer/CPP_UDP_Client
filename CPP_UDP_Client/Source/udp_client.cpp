@@ -130,7 +130,7 @@ namespace Essentials
 			return 0;
 		}
 
-		int8_t  UDP_Client::SetDestination(const std::string& address, const int16_t port)
+		int8_t  UDP_Client::SetUnicastDestination(const std::string& address, const int16_t port)
 		{
 			if (ValidateIP(address) == -1)
 			{
@@ -294,7 +294,7 @@ namespace Essentials
 
 			// Enable SO_REUSEADDR to allow multiple sockets to bind to the same address
 			int8_t reuseAddr = 1;
-			if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
+			if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
 			{
 				closesocket(sock);
 				mLastError = UdpClientError::ENABLE_REUSEADDR_FAILED;
@@ -318,7 +318,7 @@ namespace Essentials
 			localAddr.sin_addr.s_addr = INADDR_ANY;
 
 			// Bind the socket to the multicast address
-			if (bind(sock, (struct sockaddr*)&localAddr, sizeof(localAddr)) < 0)
+			if (bind(sock, (sockaddr*)&localAddr, sizeof(localAddr)) < 0)
 			{
 				mLastError = UdpClientError::MULTICAST_BIND_FAILED;
 				return 1;
@@ -384,7 +384,7 @@ namespace Essentials
 			return 0;
 		}
 
-		int8_t UDP_Client::Open()
+		int8_t UDP_Client::OpenUnicast()
 		{
 			if (mSocket != -1)
 			{
@@ -458,7 +458,7 @@ namespace Essentials
 			// verify socket and then send datagram
 			if (mSocket != INVALID_SOCKET)
 			{
-				int32_t numSent = sendto(mSocket, buffer, size, 0, (struct sockaddr*)&mDestinationAddr, sizeof(mDestinationAddr));
+				int32_t numSent = sendto(mSocket, buffer, size, 0, (sockaddr*)&mDestinationAddr, sizeof(mDestinationAddr));
 
 				if (numSent == -1)
 				{
@@ -503,7 +503,7 @@ namespace Essentials
 				}
 
 				int32_t numSent = 0;
-				numSent = sendto(mSocket, buffer, size, 0, (struct sockaddr*)&sentTo, sizeof(sentTo));
+				numSent = sendto(mSocket, buffer, size, 0, (sockaddr*)&sentTo, sizeof(sentTo));
 
 				if (numSent == -1)
 				{
@@ -524,7 +524,7 @@ namespace Essentials
 			// verify socket and then send datagram
 			if (mBroadcastSocket != INVALID_SOCKET)
 			{
-				int32_t numSent = sendto(mBroadcastSocket, buffer, size, 0, (struct sockaddr*)&mBroadcastAddr, sizeof(sockaddr_in));
+				int32_t numSent = sendto(mBroadcastSocket, buffer, size, 0, (sockaddr*)&mBroadcastAddr, sizeof(sockaddr_in));
 
 				if (numSent == -1)
 				{
@@ -549,9 +549,9 @@ namespace Essentials
 				for (const auto& i : mMulticastSockets)
 				{
 					// Grab the socket and addr info from the vector for use.
-					SOCKET sock = get<0>(i);
-					sockaddr_in addr = get<1>(i);
-					Endpoint ep = get<2>(i);
+					SOCKET sock = std::get<0>(i);
+					sockaddr_in addr = std::get<1>(i);
+					Endpoint ep = std::get<2>(i);
 
 					// If groupIP is not empty, check the IP we are currently sending to and only send to the desired group.
 					if (!groupIP.empty() && groupIP != ep.ipAddress)
@@ -559,7 +559,7 @@ namespace Essentials
 						continue;
 					}
 
-					numSent = sendto(sock, buffer, size, 0, (struct sockaddr*)&addr, sizeof(sockaddr_in));
+					numSent = sendto(sock, buffer, size, 0, (sockaddr*)&addr, sizeof(sockaddr_in));
 
 					if (numSent < 0)
 					{
@@ -582,9 +582,9 @@ namespace Essentials
 
 			// Receive datagram over UDP
 #if defined WIN32
-			int32_t sizeRead = recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize-1, 0, (struct sockaddr*)&sourceAddress, &addressLength);
+			int32_t sizeRead = recvfrom(mSocket, reinterpret_cast<char*>(buffer), maxSize-1, 0, (sockaddr*)&sourceAddress, &addressLength);
 #else
-			int32_t sizeRead = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength));
+			int32_t sizeRead = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (sockaddr*)&sourceAddress, reinterpret_cast<socklen_t*>(&addressLength));
 #endif
 
 			// Check for error
@@ -643,8 +643,8 @@ namespace Essentials
 				for (const auto& i : mBroadcastListeners)
 				{
 					// Grab the socket and addr info from the vector for use.
-					SOCKET sock = get<0>(i);
-					sockaddr_in addr = get<1>(i);
+					SOCKET sock = std::get<0>(i);
+					sockaddr_in addr = std::get<1>(i);
 
 					if (sock != INVALID_SOCKET)
 					{
@@ -670,7 +670,7 @@ namespace Essentials
 #if defined WIN32
 							int32_t receivedBytes = recvfrom(sock, (char*)buffer, maxSize-1, 0, reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
 #else
-							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
+							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
 #endif
 
 							if (receivedBytes == SOCKET_ERROR)
@@ -724,9 +724,9 @@ namespace Essentials
 				for (const auto& i : mBroadcastListeners)
 				{
 					// Grab the socket and addr info from the vector for use.
-					SOCKET sock = get<0>(i);
-					sockaddr_in addr = get<1>(i);
-					Endpoint ep = get<2>(i);
+					SOCKET sock = std::get<0>(i);
+					sockaddr_in addr = std::get<1>(i);
+					Endpoint ep = std::get<2>(i);
 
 					// If the ports arent equal, continue to next iteration.
 					if (port != ep.port)
@@ -758,7 +758,7 @@ namespace Essentials
 #if defined WIN32
 							int32_t receivedBytes = recvfrom(sock, (char*)buffer, maxSize - 1, 0, reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
 #else
-							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
+							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
 #endif
 
 							if (receivedBytes == SOCKET_ERROR)
@@ -801,8 +801,8 @@ namespace Essentials
 				for (const auto& i : mMulticastSockets)
 				{
 					// Grab the socket and addr info from the vector for use.
-					SOCKET sock = get<0>(i);
-					sockaddr_in addr = get<1>(i);
+					SOCKET sock = std::get<0>(i);
+					sockaddr_in addr = std::get<1>(i);
 
 					if (sock != INVALID_SOCKET)
 					{
@@ -828,7 +828,7 @@ namespace Essentials
 #if defined WIN32
 							int32_t receivedBytes = recvfrom(sock, (char*)buffer, maxSize - 1, 0, reinterpret_cast<sockaddr*>(&recvFrom), &recvFromSize);
 #else
-							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (struct sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
+							int32_t receivedBytes = recvfrom(mSocket, buffer, static_cast<size_t>(maxSize) - 1, 0, (sockaddr*)&recvFrom, reinterpret_cast<socklen_t*>(&recvFromSize));
 #endif
 
 							if (receivedBytes == SOCKET_ERROR)
@@ -882,7 +882,7 @@ namespace Essentials
 
 			for (const auto& i : mBroadcastListeners)
 			{
-				closesocket(get<0>(i));
+				closesocket(std::get<0>(i));
 			}
 			
 			mBroadcastListeners.clear();
@@ -892,7 +892,7 @@ namespace Essentials
 		{
 			for (const auto& i : mMulticastSockets)
 			{
-				closesocket(get<0>(i));
+				closesocket(std::get<0>(i));
 			}
 
 			mMulticastSockets.clear();
@@ -908,7 +908,7 @@ namespace Essentials
 				{
 					for (const auto& i : mMulticastSockets)
 					{
-						SOCKET sock = get<0>(i);
+						SOCKET sock = std::get<0>(i);
 
 						if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&mTimeToLive, sizeof(mTimeToLive)) == SOCKET_ERROR)
 						{

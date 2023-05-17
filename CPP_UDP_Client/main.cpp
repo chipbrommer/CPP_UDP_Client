@@ -30,12 +30,12 @@ int main()
 		std::cout << udp->GetLastError() << std::endl;
 	}
 
-	if (udp->SetDestination("127.0.0.1", 5001) < 0)
+	if (udp->SetUnicastDestination("127.0.0.1", 5001) < 0)
 	{
 		std::cout << udp->GetLastError() << std::endl;
 	}
 
-	if (udp->Open() < 0)
+	if (udp->OpenUnicast() < 0)
 	{
 		std::cout << udp->GetLastError() << std::endl;
 	}

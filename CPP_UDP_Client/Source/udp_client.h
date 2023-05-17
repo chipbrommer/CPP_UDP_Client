@@ -172,7 +172,7 @@ namespace Essentials
 			/// <param name="address"> -[in]- Address to sent to</param>
 			/// <param name="port"> -[in]- Port to sent to</param>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t SetDestination(const std::string& address, const int16_t port);
+			int8_t SetUnicastDestination(const std::string& address, const int16_t port);
 
 			/// <summary>A function to enable broadcasting</summary>
 			/// <param name="port"> -[in]- Port to broadcast on</param>
@@ -206,7 +206,7 @@ namespace Essentials
 
 			/// <summary>Opens the UDP unicast socket and binds it to the set address and port</summary>
 			/// <returns>0 if successful, -1 if fails. Call Serial::GetLastError to find out more.</returns>
-			int8_t Open();
+			int8_t OpenUnicast();
 
 			/// <summary>Send a message over a specified socket type</summary>
 			/// <param name="buffer"> -[in]- Buffer to be sent</param>
